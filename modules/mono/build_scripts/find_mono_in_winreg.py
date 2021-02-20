@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import os
 import platform
 
@@ -62,52 +64,14 @@ def find_mono_root_dir(bits):
     return ""
 
 
-def find_msbuild_tools_path_reg():
-    import subprocess
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(
+        description='Attempts to find the Mono install directory in the Windows Registry')
+    parser.add_argument('cpu_family', choices=['x86', 'x86_64'], type=str)
 
-    vswhere = os.getenv("PROGRAMFILES(X86)")
-    if not vswhere:
-        vswhere = os.getenv("PROGRAMFILES")
-    vswhere += r"\Microsoft Visual Studio\Installer\vswhere.exe"
+    args = parser.parse_args()
 
-    vswhere_args = ["-latest", "-products", "*", "-requires", "Microsoft.Component.MSBuild"]
-
-    try:
-        lines = subprocess.check_output([vswhere] + vswhere_args).splitlines()
-
-        for line in lines:
-            parts = line.decode("utf-8").split(":", 1)
-
-            if len(parts) < 2 or parts[0] != "installationPath":
-                continue
-
-            val = parts[1].strip()
-
-            if not val:
-                raise ValueError("Value of `installationPath` entry is empty")
-
-            # Since VS2019, the directory is simply named "Current"
-            msbuild_dir = os.path.join(val, "MSBuild\\Current\\Bin")
-            if os.path.isdir(msbuild_dir):
-                return msbuild_dir
-
-            # Directory name "15.0" is used in VS 2017
-            return os.path.join(val, "MSBuild\\15.0\\Bin")
-
-        raise ValueError("Cannot find `installationPath` entry")
-    except ValueError as e:
-        print("Error reading output from vswhere: " + e.message)
-    except OSError:
-        pass  # Fine, vswhere not found
-    except (subprocess.CalledProcessError, OSError):
-        pass
-
-    # Try to find 14.0 in the Registry
-
-    try:
-        subkey = r"SOFTWARE\Microsoft\MSBuild\ToolsVersions\14.0"
-        with _reg_open_key(winreg.HKEY_LOCAL_MACHINE, subkey) as hKey:
-            value = winreg.QueryValueEx(hKey, "MSBuildToolsPath")[0]
-            return value
-    except OSError:
-        return ""
+    res = find_mono_root_dir(bits='32' if args.cpu_family == 'x86' else '64')
+    if res:
+        print(res)

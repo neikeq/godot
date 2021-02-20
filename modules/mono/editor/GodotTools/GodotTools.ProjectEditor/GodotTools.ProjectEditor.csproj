@@ -3,6 +3,7 @@
     <ProjectGuid>{A8CDAD94-C6D4-4B19-A7E7-76C53CC92984}</ProjectGuid>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>7.2</LangVersion>
+    <EnableDefaultItems>false</EnableDefaultItems>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Build" Version="16.5.0" />
@@ -29,4 +30,11 @@
     <!-- Need to copy it here as well on Windows -->
     <Copy SourceFiles="MSBuild.exe" DestinationFiles="$(GodotOutputDataDir)\Mono\lib\mono\v4.0\MSBuild.exe" />
   </Target>
+  <ItemGroup>
+    <Compile Include="ProjectUtils.cs" />
+    <Compile Include="IdentifierUtils.cs" />
+    <Compile Include="ProjectGenerator.cs" />
+    <Compile Include="ApiAssembliesInfo.cs" />
+    <Compile Include="DotNetSolution.cs" />
+  </ItemGroup>
 </Project>

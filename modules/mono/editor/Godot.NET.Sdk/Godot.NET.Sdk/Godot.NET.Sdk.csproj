@@ -12,6 +12,7 @@
     <PackageType>MSBuildSdk</PackageType>
     <PackageTags>MSBuildSdk</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GodotNETSdkPackageVersionFile>$(ProjectDir)Godot.NET.Sdk_PackageVersion.txt</GodotNETSdkPackageVersionFile>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -19,11 +20,26 @@
     <GenerateNuspecDependsOn>$(GenerateNuspecDependsOn);SetNuSpecProperties</GenerateNuspecDependsOn>
   </PropertyGroup>
 
-  <Target Name="ReadGodotNETSdkVersion" BeforeTargets="BeforeBuild;BeforeRebuild;CoreCompile">
+  <ItemGroup>
+    <None Include="$(GodotNETSdkPackageVersionFile)" /> <!-- For Meson to track -->
+  </ItemGroup>
+
+  <Target
+    Name="ReadGodotNETSdkVersion"
+    BeforeTargets="BeforeBuild;BeforeRebuild;CoreCompile">
     <PropertyGroup>
-      <PackageVersion>$([System.IO.File]::ReadAllText('$(ProjectDir)Godot.NET.Sdk_PackageVersion.txt').Trim())</PackageVersion>
+      <PackageVersion>$([System.IO.File]::ReadAllText('$(GodotNETSdkPackageVersionFile)').Trim())</PackageVersion>
     </PropertyGroup>
   </Target>
+
+  <PropertyGroup Condition=" '$(MesonBuildDir)' != '' ">
+    <!-- The project is part of the Godot source tree -->
+    <!-- Use the Godot source tree output folder instead of '$(ProjectDir)/bin' -->
+    <OutputPath>$(MesonBuildDir)\GodotSharp\Tools\nupkgs\</OutputPath>
+
+    <AppendTargetFrameworkToOutputPath>False</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>False</GenerateDependencyFile> <!-- Don't generate $(OutputPath)Godot.NET.Sdk.deps.json -->
+  </PropertyGroup>
 
   <Target Name="SetNuSpecProperties" Condition=" Exists('$(NuspecFile)') " DependsOnTargets="ReadGodotNETSdkVersion">
     <PropertyGroup>
@@ -37,14 +53,5 @@
         projecturl=$(PackageProjectUrl)
       </NuspecProperties>
     </PropertyGroup>
-  </Target>
-
-  <Target Name="CopyNupkgToSConsOutputDir" AfterTargets="Pack">
-    <PropertyGroup>
-      <GodotSourceRootPath>$(SolutionDir)\..\..\..\..\</GodotSourceRootPath>
-      <GodotOutputDataDir>$(GodotSourceRootPath)\bin\GodotSharp\</GodotOutputDataDir>
-    </PropertyGroup>
-    <Copy SourceFiles="$(OutputPath)$(PackageId).$(PackageVersion).nupkg"
-          DestinationFolder="$(GodotOutputDataDir)Tools\nupkgs\" />
   </Target>
 </Project>

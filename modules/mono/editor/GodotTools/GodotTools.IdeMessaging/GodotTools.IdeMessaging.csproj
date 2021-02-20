@@ -2,6 +2,7 @@
   <PropertyGroup>
     <ProjectGuid>{92600954-25F0-4291-8E11-1FEE9FC4BE20}</ProjectGuid>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <EnableDefaultItems>false</EnableDefaultItems>
     <LangVersion>7.2</LangVersion>
     <PackageId>GodotTools.IdeMessaging</PackageId>
     <Version>1.1.1</Version>
@@ -20,5 +21,21 @@ A client using this library is only compatible with servers of the same major ve
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="ClientHandshake.cs" />
+    <Compile Include="Client.cs" />
+    <Compile Include="ILogger.cs" />
+    <Compile Include="Peer.cs" />
+    <Compile Include="IHandshake.cs" />
+    <Compile Include="MessageDecoder.cs" />
+    <Compile Include="ResponseAwaiter.cs" />
+    <Compile Include="Requests\Requests.cs" />
+    <Compile Include="GodotIdeMetadata.cs" />
+    <Compile Include="ClientMessageHandler.cs" />
+    <Compile Include="Message.cs" />
+    <Compile Include="IMessageHandler.cs" />
+    <Compile Include="Utils\NotifyAwaiter.cs" />
+    <Compile Include="Utils\SemaphoreExtensions.cs" />
   </ItemGroup>
 </Project>

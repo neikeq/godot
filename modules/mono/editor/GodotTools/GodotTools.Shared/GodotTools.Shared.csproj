@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
+        <EnableDefaultItems>false</EnableDefaultItems>
     </PropertyGroup>
     <Import Project="GenerateGodotNupkgsVersions.targets" />
+    <ItemGroup>
+        <MesonWatchImport Include="GenerateGodotNupkgsVersions.targets" />
+    </ItemGroup>
 </Project>

@@ -40,7 +40,7 @@
 #include "core/os/os.h"
 #include "core/string/ucaps.h"
 
-#include "../glue/cs_glue_version.gen.h"
+#include "../cs_glue_version.gen.h"
 #include "../godotsharp_defs.h"
 #include "../mono_gd/gd_mono_marshal.h"
 #include "../utils/path_utils.h"

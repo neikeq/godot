@@ -1,6 +1,10 @@
 <Project>
   <!-- Generate C# file with the version of all the nupkgs bundled with Godot -->
 
+  <ItemGroup>
+    <None Include="$(GodotNETSdkPackageVersionFile)" /> <!-- For Meson to track -->
+  </ItemGroup>
+
   <Target Name="SetPropertiesForGenerateGodotNupkgsVersions">
     <PropertyGroup>
       <GodotNETSdkPackageVersionFile>$(SolutionDir)..\Godot.NET.Sdk\Godot.NET.Sdk\Godot.NET.Sdk_PackageVersion.txt</GodotNETSdkPackageVersionFile>

@@ -1,0 +1,15 @@
+<Project>
+    <Target Name="WriteMesonDepList" Condition=" '$(MesonDepListPath)' != '' ">
+        <Message Importance="High" Text="Writing to depfile ($(ProjectName)): $(MesonDepListPath)" />
+        <WriteLinesToFile
+            File="$(MesonDepListPath)"
+            Lines="%(Compile.FullPath);%(ProjectReference.FullPath);%(MesonWatchImport.FullPath)"
+            Overwrite="false"
+            Encoding="utf-8" />
+        <WriteLinesToFile
+            File="$(MesonDepListPath)"
+            Lines="$(ProjectPath)"
+            Overwrite="false"
+            Encoding="utf-8" />
+    </Target>
+</Project>

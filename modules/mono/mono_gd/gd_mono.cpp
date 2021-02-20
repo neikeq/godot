@@ -892,6 +892,7 @@ bool GDMono::_try_load_api_assemblies(LoadedApiAssembly &r_core_api_assembly, Lo
 	}
 
 	if (r_editor_api_assembly.out_of_sync) {
+		print_verbose("Mono: Editor API assembly is out of sync");
 		return false;
 	}
 #endif
@@ -900,6 +901,7 @@ bool GDMono::_try_load_api_assemblies(LoadedApiAssembly &r_core_api_assembly, Lo
 	// editor API assembly. Otherwise, if both assemblies are out of sync, we would
 	// only update the former as we won't know the latter also needs to be updated.
 	if (r_core_api_assembly.out_of_sync) {
+		print_verbose("Mono: Core API assembly is out of sync");
 		return false;
 	}
 

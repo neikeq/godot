@@ -4,9 +4,16 @@
     <OutputPath>bin/$(Configuration)</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <RootNamespace>Godot</RootNamespace>
-    <TargetFramework>netstandard2.1</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <DocumentationFile>$(OutputPath)/$(AssemblyName).xml</DocumentationFile>
     <EnableDefaultItems>false</EnableDefaultItems>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(MesonBuildDir)' != '' ">
+    <!-- The project is part of the Godot source tree -->
+    <!-- Use the Godot source tree output folder instead of '$(ProjectDir)/bin' -->
+    <OutputPath>$(MesonBuildDir)\GodotSharp\Api\$(Configuration)\</OutputPath>
+    <!-- Must not append '$(TargetFramework)' to the output path in this case -->
+    <AppendTargetFrameworkToOutputPath>False</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <PropertyGroup>
     <DefineConstants>$(DefineConstants);GODOT</DefineConstants>
@@ -67,5 +74,8 @@
   We can't use wildcards as there may be undesired old files still hanging around.
   Fortunately code completion, go to definition and such still work.
   -->
-  <Import Project="Generated\GeneratedIncludes.props" />
+  <Import Project="Generated\GeneratedIncludes.props" Condition=" '$(ExcludeGeneratedSources)' == '' " />
+  <ItemGroup>
+    <MesonWatchImport Include="Generated\GeneratedIncludes.props" Condition=" '$(ExcludeGeneratedSources)' == '' " />
+  </ItemGroup>
 </Project>

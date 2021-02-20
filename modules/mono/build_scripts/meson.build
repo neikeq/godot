@@ -1,0 +1,8 @@
+SCRIPT_CS_GLUE_VERSION = find_program('cs_glue_version.py')
+SCRIPT_PRINT_ENV_VAR = find_program('print_env_var.py')
+SCRIPT_COPY_FILE = find_program('copy_file.py')
+SCRIPT_PRINT_FILE = find_program('print_file.py')
+SCRIPT_RUN_MSBUILD = find_program('run_msbuild.py')
+SCRIPT_LIST_DIR_ASSEMBLIES = find_program('list_dir_assemblies.py')
+SCRIPT_FIND_MONO_IN_WINREG = find_program('find_mono_in_winreg.py')
+SCRIPT_FIND_MSBUILD = find_program('find_msbuild.py')

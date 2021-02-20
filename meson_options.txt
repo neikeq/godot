@@ -11,7 +11,7 @@ option('xaudio2', type: 'boolean', value: false, description: 'Enable the XAudio
 option('android_neon', type: 'boolean', value: true, description: 'Enable NEON support (armv7 only)')
 option('custom_modules', type: 'array', value: [], description: 'A list of comma-separated directory paths containing custom modules to build')
 # add text_server_fb to disabled modules
-option('disabled_modules', type: 'array', value: ['mono', 'text_server_fb'], description: 'A list of modules that are to be disabled')
+option('disabled_modules', type: 'array', value: ['text_server_fb'], description: 'A list of modules that are to be disabled')
 option('disable_all_modules', type: 'boolean', value: false, description: 'A boolean that disables ALL modules.')
 
 # Advanced options
@@ -54,7 +54,15 @@ option('builtin_graphite', type: 'boolean', value: true, description: 'Use the b
 option('builtin_icu', type: 'boolean', value: true, description: 'Use the built-in icu library')
 
 # Mono options
-option('mono_glue', type: 'boolean', value: true, description: 'Enable mono glue')
+
+option('mono_prefix', type: 'string', value: '', description: 'Path to the Mono installation directory for the target platform and architecture')
+option('mono_bcl', type: 'string', value: '', description: 'Path to a custom Mono BCL (Base Class Library) directory for the target platform')
+option('mono_static', type: 'combo', choices: ['auto', 'true', 'false'], value: 'auto', description: 'Statically link Mono')
+option('mono_glue', type: 'boolean', value: true, description: 'Build with the Mono glue sources')
+option('build_cil', type: 'boolean', value: true, description: 'Build C# solutions')
+option('copy_mono_root', type: 'boolean', value: true, description: 'Make a copy of the Mono installation directory to bundle with the editor')
+# TODO: It would be great if this could be detected automatically instead
+option('mono_bundles_zlib', type: 'combo', choices: ['auto', 'true', 'false'], value: 'auto', description: 'Specify if the Mono runtime was built with bundled zlib')
 
 # Javascript Options
 option('initial_wasm_memory', type: 'integer', value: 16, description: 'Initial WASM memory (in MiB)')

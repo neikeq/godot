@@ -4,14 +4,12 @@
     <TargetFramework>net472</TargetFramework>
     <LangVersion>7.2</LangVersion>
     <GodotApiConfiguration>Debug</GodotApiConfiguration> <!-- The Godot editor uses the Debug Godot API assemblies -->
-    <GodotSourceRootPath>$(SolutionDir)/../../../../</GodotSourceRootPath>
-    <GodotOutputDataDir>$(GodotSourceRootPath)/bin/GodotSharp</GodotOutputDataDir>
-    <GodotApiAssembliesDir>$(GodotOutputDataDir)/Api/$(GodotApiConfiguration)</GodotApiAssembliesDir>
+    <EnableDefaultItems>false</EnableDefaultItems>
   </PropertyGroup>
-  <PropertyGroup Condition=" Exists('$(GodotApiAssembliesDir)/GodotSharp.dll') ">
+  <PropertyGroup Condition=" '$(MesonBuildDir)' != '' ">
     <!-- The project is part of the Godot source tree -->
     <!-- Use the Godot source tree output folder instead of '$(ProjectDir)/bin' -->
-    <OutputPath>$(GodotOutputDataDir)/Tools</OutputPath>
+    <OutputPath>$(MesonBuildDir)\GodotSharp\Tools</OutputPath>
     <!-- Must not append '$(TargetFramework)' to the output path in this case -->
     <AppendTargetFrameworkToOutputPath>False</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
@@ -19,14 +17,12 @@
     <PackageReference Include="JetBrains.Annotations" Version="2019.1.3.0" ExcludeAssets="runtime" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.0" PrivateAssets="All" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
-    <Reference Include="GodotSharp">
-      <HintPath>$(GodotApiAssembliesDir)/GodotSharp.dll</HintPath>
+    <ProjectReference Include="..\..\..\glue\GodotSharp\GodotSharp\GodotSharp.csproj">
       <Private>False</Private>
-    </Reference>
-    <Reference Include="GodotSharpEditor">
-      <HintPath>$(GodotApiAssembliesDir)/GodotSharpEditor.dll</HintPath>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\glue\GodotSharp\GodotSharpEditor\GodotSharpEditor.csproj">
       <Private>False</Private>
-    </Reference>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GodotTools.BuildLogger\GodotTools.BuildLogger.csproj" />
@@ -35,5 +31,41 @@
     <ProjectReference Include="..\GodotTools.Core\GodotTools.Core.csproj" />
     <!-- Include it if this is an SCons build targeting Windows, or if it's not an SCons build but we're on Windows -->
     <ProjectReference Include="..\GodotTools.OpenVisualStudio\GodotTools.OpenVisualStudio.csproj" Condition=" '$(GodotPlatform)' == 'windows' Or ( '$(GodotPlatform)' == '' And '$(OS)' == 'Windows_NT' ) " />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Build\BuildOutputView.cs" />
+    <Compile Include="Build\MSBuildPanel.cs" />
+    <Compile Include="Build\BuildManager.cs" />
+    <Compile Include="Build\BuildTool.cs" />
+    <Compile Include="Build\BuildSystem.cs" />
+    <Compile Include="Build\MsBuildFinder.cs" />
+    <Compile Include="Build\BuildResult.cs" />
+    <Compile Include="Build\BuildInfo.cs" />
+    <Compile Include="Build\NuGetUtils.cs" />
+    <Compile Include="Export\AotBuilder.cs" />
+    <Compile Include="Export\XcodeHelper.cs" />
+    <Compile Include="Export\ExportPlugin.cs" />
+    <Compile Include="Ides\MonoDevelop\EditorId.cs" />
+    <Compile Include="Ides\MonoDevelop\Instance.cs" />
+    <Compile Include="Ides\GodotIdeManager.cs" />
+    <Compile Include="Ides\Rider\RiderPathLocator.cs" />
+    <Compile Include="Ides\Rider\RiderPathManager.cs" />
+    <Compile Include="Ides\MessagingServer.cs" />
+    <Compile Include="Internals\Globals.cs" />
+    <Compile Include="Internals\GodotSharpDirs.cs" />
+    <Compile Include="Internals\EditorProgress.cs" />
+    <Compile Include="Internals\Internal.cs" />
+    <Compile Include="Internals\ScriptClassParser.cs" />
+    <Compile Include="Utils\OS.cs" />
+    <Compile Include="Utils\User32Dll.cs" />
+    <Compile Include="Utils\File.cs" />
+    <Compile Include="Utils\CollectionExtensions.cs" />
+    <Compile Include="Utils\Directory.cs" />
+    <Compile Include="Utils\FsPathUtils.cs" />
+    <Compile Include="CsProjOperations.cs" />
+    <Compile Include="GodotSharpEditor.cs" />
+    <Compile Include="HotReloadAssemblyWatcher.cs" />
+    <Compile Include="ExternalEditorId.cs" />
+    <Compile Include="PlaySettings.cs" />
   </ItemGroup>
 </Project>

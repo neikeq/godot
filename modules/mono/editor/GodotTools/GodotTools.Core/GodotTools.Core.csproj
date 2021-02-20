@@ -3,5 +3,11 @@
     <ProjectGuid>{639E48BD-44E5-4091-8EDD-22D36DC0768D}</ProjectGuid>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>7.2</LangVersion>
+    <EnableDefaultItems>false</EnableDefaultItems>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="StringExtensions.cs" />
+    <Compile Include="ProcessExtensions.cs" />
+    <Compile Include="FileUtils.cs" />
+  </ItemGroup>
 </Project>
