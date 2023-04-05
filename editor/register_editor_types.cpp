@@ -36,6 +36,7 @@
 #include "editor/editor_feature_profile.h"
 #include "editor/editor_file_dialog.h"
 #include "editor/editor_file_system.h"
+#include "editor/editor_interface.h"
 #include "editor/editor_node.h"
 #include "editor/editor_paths.h"
 #include "editor/editor_resource_picker.h"
@@ -229,10 +230,17 @@ void register_editor_types() {
 
 	GLOBAL_DEF("editor/version_control/plugin_name", "");
 	GLOBAL_DEF("editor/version_control/autoload_on_startup", false);
+
+	EditorInterface::create();
+	Engine::get_singleton()->add_singleton(Engine::Singleton("EditorInterface", EditorInterface::get_singleton()));
 }
 
 void unregister_editor_types() {
 	EditorNode::cleanup();
+
+	if (EditorInterface::get_singleton()) {
+		EditorInterface::free();
+	}
 	if (EditorPaths::get_singleton()) {
 		EditorPaths::free();
 	}

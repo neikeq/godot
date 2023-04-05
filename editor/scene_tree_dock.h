@@ -33,11 +33,12 @@
 
 #include "scene_tree_editor.h"
 
-#include "editor/editor_data.h"
 #include "editor/script_create_dialog.h"
 #include "scene/gui/box_container.h"
 #include "scene/resources/animation.h"
 
+class EditorData;
+class EditorSelection;
 class EditorQuickOpen;
 class MenuButton;
 class ReparentDialog;
