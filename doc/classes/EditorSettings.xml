@@ -17,7 +17,7 @@
 		var list_of_settings = settings.get_property_list()
 		[/gdscript]
 		[csharp]
-		EditorSettings settings = GetEditorInterface().GetEditorSettings();
+		EditorSettings settings = EditorInterface.GetEditorSettings();
 		// `settings.set("some/property", value)` also works as this class overrides `_set()` internally.
 		settings.SetSetting("some/property", Value);
 		// `settings.get("some/property", value)` also works as this class overrides `_get()` internally.

@@ -76,6 +76,7 @@
 #include "editor/editor_folding.h"
 #include "editor/editor_help.h"
 #include "editor/editor_inspector.h"
+#include "editor/editor_interface.h"
 #include "editor/editor_layouts_dialog.h"
 #include "editor/editor_log.h"
 #include "editor/editor_paths.h"
@@ -7894,11 +7895,6 @@ EditorNode::EditorNode() {
 	} else {
 		print_verbose("Asset Library not available (due to using Web editor, or SSL support disabled).");
 	}
-
-	// Add interface before adding plugins.
-
-	editor_interface = memnew(EditorInterface);
-	add_child(editor_interface);
 
 	// More visually meaningful to have this later.
 	raise_bottom_panel_item(AnimationPlayerEditor::get_singleton());

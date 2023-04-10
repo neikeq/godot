@@ -30,6 +30,7 @@
 
 #include "editor_run_script.h"
 
+#include "editor/editor_interface.h"
 #include "editor/editor_node.h"
 
 void EditorScript::add_root_node(Node *p_node) {
@@ -44,10 +45,6 @@ void EditorScript::add_root_node(Node *p_node) {
 	}
 
 	//editor->set_edited_scene(p_node);
-}
-
-EditorInterface *EditorScript::get_editor_interface() {
-	return EditorInterface::get_singleton();
 }
 
 Node *EditorScript::get_scene() {
@@ -72,7 +69,6 @@ void EditorScript::set_editor(EditorNode *p_editor) {
 void EditorScript::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("add_root_node", "node"), &EditorScript::add_root_node);
 	ClassDB::bind_method(D_METHOD("get_scene"), &EditorScript::get_scene);
-	ClassDB::bind_method(D_METHOD("get_editor_interface"), &EditorScript::get_editor_interface);
 	GDVIRTUAL_BIND(_run);
 }
 

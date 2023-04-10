@@ -269,7 +269,6 @@ private:
 
 	EditorCommandPalette *command_palette = nullptr;
 	EditorExport *editor_export = nullptr;
-	EditorInterface *editor_interface = nullptr;
 	EditorLog *log = nullptr;
 	EditorNativeShaderSourceVisualizer *native_shader_source_visualizer = nullptr;
 	EditorPlugin *editor_plugin_screen = nullptr;

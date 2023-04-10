@@ -13,7 +13,7 @@ namespace GodotTools.Ides.Rider
 
         private static string GetRiderPathFromSettings()
         {
-            var editorSettings = GodotSharpEditor.Instance.GetEditorInterface().GetEditorSettings();
+            var editorSettings = EditorInterface.GetEditorSettings();
             if (editorSettings.HasSetting(EditorPathSettingName))
                 return (string)editorSettings.GetSetting(EditorPathSettingName);
             return null;
@@ -21,7 +21,7 @@ namespace GodotTools.Ides.Rider
 
         public static void Initialize()
         {
-            var editorSettings = GodotSharpEditor.Instance.GetEditorInterface().GetEditorSettings();
+            var editorSettings = EditorInterface.GetEditorSettings();
             var editor = editorSettings.GetSetting(GodotSharpEditor.Settings.ExternalEditor).As<ExternalEditorId>();
             if (editor == ExternalEditorId.Rider)
             {
@@ -81,7 +81,7 @@ namespace GodotTools.Ides.Rider
                 return riderPath;
             }
 
-            var editorSettings = GodotSharpEditor.Instance.GetEditorInterface().GetEditorSettings();
+            var editorSettings = EditorInterface.GetEditorSettings();
             var paths = RiderPathLocator.GetAllRiderPaths();
 
             if (!paths.Any())
