@@ -1514,6 +1514,15 @@ Error BindingsGenerator::_generate_cs_type(const TypeInterface &itype, const Str
 
 		// Add native name static field
 
+		if (itype.is_compat_singleton) {
+			output << MEMBER_BEGIN "private static " << itype.cs_type << " _instance;\n";
+
+			output << MEMBER_BEGIN "public static " << itype.cs_type << " Instance\n" INDENT1 "{\n"
+				   << INDENT2 "get\n" INDENT2 "{\n" INDENT3 "if (_instance == null)\n"
+				   << INDENT4 "_instance = (" << itype.cs_type << ")" C_METHOD_ENGINE_GET_SINGLETON "(\""
+				   << itype.name << "\");\n" INDENT3 "return _instance;\n" INDENT2 "}\n" INDENT1 "}\n";
+		}
+
 		if (is_derived_type) {
 			output << MEMBER_BEGIN "private static readonly System.Type CachedType = typeof(" << itype.proxy_name << ");\n";
 		}
@@ -2847,6 +2856,12 @@ bool BindingsGenerator::_populate_object_type_interfaces() {
 
 		itype.base_name = ClassDB::get_parent_class(type_cname);
 		itype.is_singleton = Engine::get_singleton()->has_singleton(type_cname);
+
+		if (itype.is_singleton && compat_singletons.has(itype.cname)) {
+			itype.is_singleton = false;
+			itype.is_compat_singleton = true;
+		}
+
 		itype.is_instantiable = class_info->creation_func && !itype.is_singleton;
 		itype.is_ref_counted = ClassDB::is_parent_class(type_cname, name_cache.type_RefCounted);
 		itype.memory_own = itype.is_ref_counted;
@@ -3899,6 +3914,8 @@ void BindingsGenerator::_initialize() {
 	enum_types.clear();
 
 	_initialize_blacklisted_methods();
+
+	compat_singletons.insert("EditorInterface");
 
 	bool obj_type_ok = _populate_object_type_interfaces();
 	ERR_FAIL_COND_MSG(!obj_type_ok, "Failed to generate object type interfaces");

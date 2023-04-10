@@ -23,7 +23,7 @@ namespace GodotTools.Build
             if (dotnetPath == null)
                 throw new FileNotFoundException("Cannot find the dotnet executable.");
 
-            var editorSettings = EditorInterface.GetEditorSettings();
+            var editorSettings = EditorInterface.Instance.GetEditorSettings();
 
             var startInfo = new ProcessStartInfo(dotnetPath);
 
@@ -88,7 +88,7 @@ namespace GodotTools.Build
             if (dotnetPath == null)
                 throw new FileNotFoundException("Cannot find the dotnet executable.");
 
-            var editorSettings = EditorInterface.GetEditorSettings();
+            var editorSettings = EditorInterface.Instance.GetEditorSettings();
 
             var startInfo = new ProcessStartInfo(dotnetPath);
 

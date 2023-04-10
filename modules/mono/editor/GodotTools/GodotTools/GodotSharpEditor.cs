@@ -411,9 +411,9 @@ namespace GodotTools
                 }
             }
 
-            var editorBaseControl = EditorInterface.GetBaseControl();
+            var editorBaseControl = EditorInterface.Instance.GetBaseControl();
 
-            _editorSettings = EditorInterface.GetEditorSettings();
+            _editorSettings = EditorInterface.Instance.GetEditorSettings();
 
             _errorDialog = new AcceptDialog();
             editorBaseControl.AddChild(_errorDialog);
