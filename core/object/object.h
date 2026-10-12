@@ -910,6 +910,16 @@ class ObjectDB {
 	friend void register_core_types();
 	static void setup();
 
+	_ALWAYS_INLINE_ static Object *get_instance_no_lock(uint64_t p_id, uint32_t p_valid_slot) {
+		uint64_t validator = (p_id >> OBJECTDB_SLOT_MAX_COUNT_BITS) & OBJECTDB_VALIDATOR_MASK;
+
+		if (unlikely(object_slots[p_valid_slot].validator != validator)) {
+			return nullptr;
+		}
+
+		return object_slots[p_valid_slot].object;
+	}
+
 public:
 	typedef void (*DebugFunc)(Object *p_obj, void *p_user_data);
 
@@ -921,14 +931,7 @@ public:
 
 		spin_lock.lock();
 
-		uint64_t validator = (id >> OBJECTDB_SLOT_MAX_COUNT_BITS) & OBJECTDB_VALIDATOR_MASK;
-
-		if (unlikely(object_slots[slot].validator != validator)) {
-			spin_lock.unlock();
-			return nullptr;
-		}
-
-		Object *object = object_slots[slot].object;
+		Object *object = get_instance_no_lock(id, slot);
 
 		spin_lock.unlock();
 

@@ -242,7 +242,25 @@ void postinitialize_handler(Ref<T> &p_object) {
 template <typename T>
 struct is_zero_constructible<Ref<T>> : std::true_type {};
 
+namespace detail {
+void try_acquire_reference(RefCounted *p_owner, Ref<RefCounted> &r_reference);
+}
+
 template <typename T>
 Ref<T> ObjectDB::get_ref(ObjectID p_instance_id) {
-	return Ref<T>(get_instance(p_instance_id));
+	uint64_t id = p_instance_id;
+	uint32_t slot = id & OBJECTDB_SLOT_MAX_COUNT_MASK;
+
+	ERR_FAIL_COND_V(slot >= slot_max, nullptr); // This should never happen unless RID is corrupted.
+
+	spin_lock.lock();
+
+	Object *object = get_instance_no_lock(id, slot);
+
+	Ref<T> ref;
+	detail::try_acquire_reference(Object::cast_to<T>(object), reinterpret_cast<Ref<RefCounted> &>(ref));
+
+	spin_lock.unlock();
+
+	return ref;
 }

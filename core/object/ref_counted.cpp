@@ -133,3 +133,14 @@ RefCounted::RefCounted() :
 	refcount_init.init();
 	dereference_count.set(0);
 }
+
+void detail::try_acquire_reference(RefCounted *p_owner, Ref<RefCounted> &r_reference) {
+	if (p_owner != nullptr) {
+		ScriptInstance *si = p_owner->get_script_instance();
+		if (si != nullptr) {
+			si->try_acquire_owner_reference(p_owner, r_reference);
+		} else {
+			r_reference = Ref(p_owner);
+		}
+	}
+}
