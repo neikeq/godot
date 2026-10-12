@@ -83,6 +83,17 @@ public:
 	virtual void refcount_incremented() {}
 	virtual bool refcount_decremented() { return true; } //return true if it can die
 
+	/**
+	 * @brief Tries to acquire a reference to the script instance's owner.
+	 * @remarks
+	 *	This method is intended to be used instead of the Ref<T>(T*) constructor when the lifetime of the object is uncertain.
+	 *	In languages with garbage collection, it may be preferable to avoid acquiring a reference if the managed object has already been finalized or is in the process of being finalized.
+	 *	In other languages, the Ref<T>(T*) constructor can be used directly.
+	 * @param p_owner The owner of the script instance to reference.
+	 * @param r_reference The output parameter where the acquired reference is assigned to.
+	 */
+	virtual void try_acquire_owner_reference(RefCounted *p_owner, Ref<RefCounted> &r_reference) const;
+
 	virtual Script *get_script() const = 0;
 
 	virtual bool is_placeholder() const { return false; }

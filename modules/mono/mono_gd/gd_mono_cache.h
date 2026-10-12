@@ -102,6 +102,7 @@ struct ManagedCallbacks {
 			Callback_ScriptManagerBridge_UpdateScriptTrampolines_TryAddRaiseSignal);
 	using FuncScriptManagerBridge_UpdateScriptClassInfo = void(GD_CLR_STDCALL *)(const CSharpScript *, CSharpScript::TypeInfo *, Array *, Dictionary *, Dictionary *, Ref<CSharpScript> *);
 	using FuncScriptManagerBridge_SwapGCHandleForType = bool(GD_CLR_STDCALL *)(GCHandleIntPtr, GCHandleIntPtr *, bool);
+	using FuncScriptManagerBridge_TryAcquireOwnerReference = void(GD_CLR_STDCALL *)(GCHandleIntPtr p_owner_gchandle, RefCounted *p_owner, Ref<RefCounted> *r_reference);
 	using FuncScriptManagerBridge_GetPropertyInfoList = void(GD_CLR_STDCALL *)(CSharpScript *, Callback_ScriptManagerBridge_GetPropertyInfoList_Add);
 	using FuncScriptManagerBridge_GetPropertyDefaultValues = void(GD_CLR_STDCALL *)(CSharpScript *, Callback_ScriptManagerBridge_GetPropertyDefaultValues_Add);
 	using FuncScriptManagerBridge_CallStatic = bool(GD_CLR_STDCALL *)(const CSharpScript *, const StringName *, const Variant **, int32_t, Callable::CallError *, Variant *);
@@ -146,6 +147,7 @@ struct ManagedCallbacks {
 	FuncScriptManagerBridge_UpdateScriptTrampolines ScriptManagerBridge_UpdateScriptTrampolines;
 	FuncScriptManagerBridge_UpdateScriptClassInfo ScriptManagerBridge_UpdateScriptClassInfo;
 	FuncScriptManagerBridge_SwapGCHandleForType ScriptManagerBridge_SwapGCHandleForType;
+	FuncScriptManagerBridge_TryAcquireOwnerReference ScriptManagerBridge_TryAcquireOwnerReference;
 	FuncScriptManagerBridge_GetPropertyInfoList ScriptManagerBridge_GetPropertyInfoList;
 	FuncScriptManagerBridge_GetPropertyDefaultValues ScriptManagerBridge_GetPropertyDefaultValues;
 	FuncScriptManagerBridge_CallStatic ScriptManagerBridge_CallStatic;

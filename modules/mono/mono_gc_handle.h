@@ -65,6 +65,7 @@ struct MonoGCHandleData {
 
 	_FORCE_INLINE_ bool is_released() const { return !handle.value; }
 	_FORCE_INLINE_ bool is_weak() const { return type == gdmono::GCHandleType::WEAK_HANDLE; }
+	_FORCE_INLINE_ bool is_strong() const { return type == gdmono::GCHandleType::STRONG_HANDLE; }
 	_FORCE_INLINE_ GCHandleIntPtr get_intptr() const { return handle; }
 
 	void release();

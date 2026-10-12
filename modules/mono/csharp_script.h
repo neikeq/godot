@@ -432,6 +432,8 @@ public:
 	void refcount_incremented() override;
 	bool refcount_decremented() override;
 
+	void try_acquire_owner_reference(RefCounted *p_owner, Ref<RefCounted> &r_reference) const override;
+
 	const Variant get_rpc_config() const override;
 
 	void notification(int p_notification, bool p_reversed = false) override;

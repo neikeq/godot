@@ -1110,7 +1110,7 @@ void CSharpLanguage::release_script_gchandle_thread_safe(GCHandleIntPtr p_gchand
 void CSharpLanguage::release_binding_gchandle_thread_safe(GCHandleIntPtr p_gchandle_to_free, CSharpScriptBinding &r_script_binding) {
 	MonoGCHandleData &gchandle = r_script_binding.gchandle;
 	if (!gchandle.is_released() && gchandle.get_intptr() == p_gchandle_to_free) { // Do not lock unnecessarily
-		MutexLock lock(get_singleton()->script_gchandle_release_mutex);
+		MutexLock lock(get_singleton()->language_bind_mutex);
 		if (!gchandle.is_released() && gchandle.get_intptr() == p_gchandle_to_free) {
 			gchandle.release();
 			r_script_binding.inited = false; // Here too, to be thread safe
@@ -1234,8 +1234,7 @@ void CSharpLanguage::_instance_binding_free_callback(void *, void *, void *p_bin
 			GDMonoCache::managed_callbacks.ScriptManagerBridge_SetGodotObjectPtr(
 					script_binding.gchandle.get_intptr(), nullptr);
 
-			script_binding.gchandle.release();
-			script_binding.inited = false;
+			release_binding_gchandle_thread_safe(script_binding.gchandle.get_intptr(), script_binding);
 		}
 
 		csharp_lang->script_bindings.erase(data);
@@ -2041,6 +2040,18 @@ bool CSharpInstance::refcount_decremented() {
 	return ref_dying;
 }
 
+void CSharpInstance::try_acquire_owner_reference(RefCounted *p_owner, Ref<RefCounted> &r_reference) const {
+	MutexLock lock(CSharpLanguage::get_singleton()->script_gchandle_release_mutex);
+
+	if (gchandle.is_released() || gchandle.is_strong()) {
+		r_reference = Ref(p_owner);
+		return;
+	}
+
+	GDMonoCache::managed_callbacks.ScriptManagerBridge_TryAcquireOwnerReference(
+			gchandle.get_intptr(), p_owner, &r_reference);
+}
+
 const Variant CSharpInstance::get_rpc_config() const {
 	return script->get_rpc_config();
 }
@@ -2133,7 +2144,9 @@ CSharpInstance::~CSharpInstance() {
 					gchandle.get_intptr(), /* okIfNull */ true);
 		}
 
-		gchandle.release(); // Make sure the gchandle is released
+		// Make sure the gchandle is released
+		// Need to use release_script_gchandle, as it locks. This avoids a data race with try_acquire_reference.
+		CSharpLanguage::get_singleton()->release_script_gchandle(gchandle);
 	}
 
 	// If not being called from the owner's destructor, and we still hold a reference to the owner

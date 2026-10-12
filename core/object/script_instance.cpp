@@ -72,6 +72,10 @@ void ScriptInstance::get_property_state(List<Pair<StringName, Variant>> &r_state
 	}
 }
 
+void ScriptInstance::try_acquire_owner_reference(RefCounted *p_owner, Ref<RefCounted> &r_reference) const {
+	r_reference = Ref(p_owner);
+}
+
 void ScriptInstance::property_set_fallback(const StringName &, const Variant &, bool *r_valid) {
 	if (r_valid) {
 		*r_valid = false;

@@ -1489,5 +1489,37 @@ namespace Godot.Bridge
                 return godot_bool.False;
             }
         }
+
+        [UnmanagedCallersOnly]
+        internal static unsafe void TryAcquireOwnerReference(IntPtr ownerGCHandlePtr,
+            IntPtr ownerObjectPtr, godot_ref* outReference)
+        {
+            try
+            {
+                var ownerGCHandle = GCHandle.FromIntPtr(ownerGCHandlePtr);
+
+                object? target = ownerGCHandle.Target;
+
+                try
+                {
+                    if (target == null)
+                    {
+                        outReference = default;
+                        return;
+                    }
+
+                    NativeFuncs.godotsharp_ref_new_from_ref_counted_ptr(out *outReference, ownerObjectPtr);
+                }
+                finally
+                {
+                    GC.KeepAlive(target);
+                }
+            }
+            catch (Exception e)
+            {
+                ExceptionUtils.LogException(e);
+                *outReference = default;
+            }
+        }
     }
 }

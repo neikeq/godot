@@ -856,7 +856,13 @@ Ref<Resource> ResourceCache::get_ref(const String &p_path) {
 		Resource **res = resources.getptr(p_path);
 
 		if (res) {
-			ref = Ref<Resource>(*res);
+			Resource *resource = *res;
+			ScriptInstance *si = resource->get_script_instance();
+			if (si != nullptr) {
+				si->try_acquire_owner_reference(resource, reinterpret_cast<Ref<RefCounted> &>(ref));
+			} else {
+				ref = Ref(resource);
+			}
 		}
 
 		if (res && ref.is_null()) {
