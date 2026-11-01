@@ -20,6 +20,8 @@ namespace Godot
         internal IntPtr NativePtr;
         private bool _memoryOwn;
 
+        internal bool Disposed => _disposed;
+
         private WeakReference<GodotObject>? _weakReferenceToSelf;
 
         /// <summary>
@@ -64,7 +66,7 @@ namespace Godot
             else
             {
                 InteropUtils.TieManagedToUnmanagedWithPreSetup(this, NativePtr,
-                    GetType(), cachedType);
+                    refCounted, GetType(), cachedType);
             }
 
             _weakReferenceToSelf = DisposablesTracker.RegisterGodotObject(this);
@@ -121,28 +123,38 @@ namespace Godot
 
             if (NativePtr != IntPtr.Zero)
             {
-                IntPtr gcHandleToFree = NativeFuncs.godotsharp_internal_object_get_associated_gchandle(NativePtr);
-
-                if (gcHandleToFree != IntPtr.Zero)
+                NativeFuncs.godotsharp_internal_lock_managed_lifetime_mutex();
+                try
                 {
-                    object? target = GCHandle.FromIntPtr(gcHandleToFree).Target;
-                    // The GC handle may have been replaced in another thread. Release it only if
-                    // it's associated to this managed instance, or if the target is no longer alive.
-                    if (target != this && target != null)
-                        gcHandleToFree = IntPtr.Zero;
-                }
+                    IntPtr gcHandle = NativeFuncs.godotsharp_internal_object_get_associated_gchandle(
+                        NativePtr, out godot_bool isDestructingScriptInstance);
 
-                if (_memoryOwn)
-                {
-                    NativeFuncs.godotsharp_internal_refcounted_disposed(NativePtr, gcHandleToFree,
-                        (!disposing).ToGodotBool());
-                }
-                else
-                {
-                    NativeFuncs.godotsharp_internal_object_disposed(NativePtr, gcHandleToFree);
-                }
+                    Debug.Assert(gcHandle != IntPtr.Zero || isDestructingScriptInstance.ToBool());
 
-                NativePtr = IntPtr.Zero;
+                    // No GC handle is returned if the script instance is being destroyed, so we need to check that.
+                    object? target = gcHandle != IntPtr.Zero ? ((GCHandle)gcHandle).Target : null;
+                    // If the GC handle we got after locking is no longer pointing to this instance, that's because
+                    // another thread already took care of this cleanup while trying to create a new managed object.
+                    // If the target is null, then it is this target that's being collected.
+                    if (target == this || target == null)
+                    {
+                        if (_memoryOwn)
+                        {
+                            NativeFuncs.godotsharp_internal_refcounted_disposed_locked(NativePtr,
+                                (!disposing).ToGodotBool());
+                        }
+                        else
+                        {
+                            NativeFuncs.godotsharp_internal_object_disposed_locked(NativePtr);
+                        }
+
+                        NativePtr = IntPtr.Zero;
+                    }
+                }
+                finally
+                {
+                    NativeFuncs.godotsharp_internal_unlock_managed_lifetime_mutex();
+                }
             }
 
             if (_weakReferenceToSelf != null)
@@ -307,7 +319,8 @@ namespace Godot
         {
             var typeSelf = (godot_string_name)type.NativeValue;
             var methodSelf = (godot_string_name)method.NativeValue;
-            IntPtr methodBind = NativeFuncs.godotsharp_method_bind_get_method_with_compatibility(typeSelf, methodSelf, hash);
+            IntPtr methodBind =
+                NativeFuncs.godotsharp_method_bind_get_method_with_compatibility(typeSelf, methodSelf, hash);
 
             if (methodBind == IntPtr.Zero)
                 throw new NativeMethodBindNotFoundException(type + "." + method);

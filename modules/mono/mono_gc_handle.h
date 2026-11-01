@@ -51,6 +51,8 @@ struct GCHandleIntPtr {
 
 	_FORCE_INLINE_ bool operator==(const GCHandleIntPtr &p_other) { return value == p_other.value; }
 	_FORCE_INLINE_ bool operator!=(const GCHandleIntPtr &p_other) { return value != p_other.value; }
+	bool operator==(std::nullptr_t) const { return value == nullptr; }
+	bool operator!=(std::nullptr_t) const { return value != nullptr; }
 
 	GCHandleIntPtr() = delete;
 };
@@ -61,11 +63,10 @@ static_assert(sizeof(GCHandleIntPtr) == sizeof(void *));
 // Manual release of the GC handle must be done when using this struct
 struct MonoGCHandleData {
 	GCHandleIntPtr handle = { nullptr };
-	gdmono::GCHandleType type = gdmono::GCHandleType::NIL;
 
 	_FORCE_INLINE_ bool is_released() const { return !handle.value; }
-	_FORCE_INLINE_ bool is_weak() const { return type == gdmono::GCHandleType::WEAK_HANDLE; }
 	_FORCE_INLINE_ GCHandleIntPtr get_intptr() const { return handle; }
+	_FORCE_INLINE_ GCHandleIntPtr &get_intptr_ref() { return handle; }
 
 	void release();
 
@@ -73,18 +74,16 @@ struct MonoGCHandleData {
 
 	void operator=(const MonoGCHandleData &p_other) {
 #ifdef DEBUG_ENABLED
-		CRASH_COND(!is_released());
+		CRASH_COND(!is_released() && handle != p_other.handle);
 #endif
 		handle = p_other.handle;
-		type = p_other.type;
 	}
 
 	MonoGCHandleData(const MonoGCHandleData &) = default;
 
 	MonoGCHandleData() {}
 
-	MonoGCHandleData(GCHandleIntPtr p_handle, gdmono::GCHandleType p_type) :
-			handle(p_handle),
-			type(p_type) {
+	explicit MonoGCHandleData(GCHandleIntPtr p_handle) :
+			handle(p_handle) {
 	}
 };

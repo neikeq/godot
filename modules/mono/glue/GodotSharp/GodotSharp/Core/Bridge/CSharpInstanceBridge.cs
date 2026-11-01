@@ -7,17 +7,18 @@ namespace Godot.Bridge
     internal static class CSharpInstanceBridge
     {
         [UnmanagedCallersOnly]
-        internal static unsafe godot_bool Call(IntPtr godotObjectGCHandle, godot_string_name* method,
-            godot_variant** args, int argCount, godot_variant_call_error* refCallError, godot_variant* outRet)
+        internal static unsafe godot_bool Call(IntPtr unmanaged, IntPtr godotObjectGCHandle,
+            godot_string_name* method, godot_variant** args, int argCount,
+            godot_variant_call_error* refCallError, godot_variant* outRet)
         {
             try
             {
-                var godotObject = (GodotObject)GCHandle.FromIntPtr(godotObjectGCHandle).Target;
-
-                if (godotObject == null)
+                if ((GodotObject)((GCHandle)godotObjectGCHandle).Target is not { Disposed: false } godotObject
+                    && !InteropUtils.TryCreateManagedForScriptInstance(unmanaged, godotObjectGCHandle, out godotObject))
                 {
                     *outRet = default;
-                    (*refCallError).Error = godot_variant_call_error_error.GODOT_CALL_ERROR_CALL_ERROR_INSTANCE_IS_NULL;
+                    (*refCallError).Error =
+                        godot_variant_call_error_error.GODOT_CALL_ERROR_CALL_ERROR_INSTANCE_IS_NULL;
                     return godot_bool.False;
                 }
 
@@ -45,14 +46,16 @@ namespace Godot.Bridge
         }
 
         [UnmanagedCallersOnly]
-        internal static unsafe godot_bool Set(IntPtr godotObjectGCHandle, godot_string_name* name, godot_variant* value)
+        internal static unsafe godot_bool Set(IntPtr unmanaged, IntPtr godotObjectGCHandle,
+            godot_string_name* name, godot_variant* value)
         {
             try
             {
-                var godotObject = (GodotObject)GCHandle.FromIntPtr(godotObjectGCHandle).Target;
-
-                if (godotObject == null)
+                if ((GodotObject)((GCHandle)godotObjectGCHandle).Target is not { Disposed: false } godotObject
+                    && !InteropUtils.TryCreateManagedForScriptInstance(unmanaged, godotObjectGCHandle, out godotObject))
+                {
                     throw new InvalidOperationException("Godot Object instance is null.");
+                }
 
                 if (godotObject.SetGodotClassPropertyValue(CustomUnsafe.AsRef(name), CustomUnsafe.AsRef(value)))
                 {
@@ -79,15 +82,16 @@ namespace Godot.Bridge
         }
 
         [UnmanagedCallersOnly]
-        internal static unsafe godot_bool Get(IntPtr godotObjectGCHandle, godot_string_name* name,
-            godot_variant* outRet)
+        internal static unsafe godot_bool Get(IntPtr unmanaged, IntPtr godotObjectGCHandle,
+            godot_string_name* name, godot_variant* outRet)
         {
             try
             {
-                var godotObject = (GodotObject)GCHandle.FromIntPtr(godotObjectGCHandle).Target;
-
-                if (godotObject == null)
+                if ((GodotObject)((GCHandle)godotObjectGCHandle).Target is not { Disposed: false } godotObject
+                    && !InteropUtils.TryCreateManagedForScriptInstance(unmanaged, godotObjectGCHandle, out godotObject))
+                {
                     throw new InvalidOperationException("Godot Object instance is null.");
+                }
 
                 // Properties
                 if (godotObject.GetGodotClassPropertyValue(CustomUnsafe.AsRef(name), out godot_variant outRetValue))
@@ -144,14 +148,13 @@ namespace Godot.Bridge
         [UnmanagedCallersOnly]
         internal static unsafe godot_bool CallViaTrampoline(
             MethodTrampolineDelegate methodTrampoline,
-            IntPtr godotObjectGCHandle, godot_variant** args, int argCount,
+            IntPtr unmanaged, IntPtr godotObjectGCHandle, godot_variant** args, int argCount,
             godot_variant_call_error* refCallError, godot_variant* outRet)
         {
             try
             {
-                object godotObject = GCHandle.FromIntPtr(godotObjectGCHandle).Target;
-
-                if (godotObject == null)
+                if ((GodotObject)((GCHandle)godotObjectGCHandle).Target is not { Disposed: false } godotObject
+                    && !InteropUtils.TryCreateManagedForScriptInstance(unmanaged, godotObjectGCHandle, out godotObject))
                 {
                     *outRet = default;
                     (*refCallError).Error = godot_variant_call_error_error.GODOT_CALL_ERROR_CALL_ERROR_INSTANCE_IS_NULL;
@@ -172,14 +175,15 @@ namespace Godot.Bridge
         [UnmanagedCallersOnly]
         internal static unsafe godot_bool SetViaTrampoline(
             PropertySetterTrampolineDelegate setterTrampoline,
-            IntPtr godotObjectGCHandle, godot_variant* value)
+            IntPtr unmanaged, IntPtr godotObjectGCHandle, godot_variant* value)
         {
             try
             {
-                object godotObject = GCHandle.FromIntPtr(godotObjectGCHandle).Target;
-
-                if (godotObject == null)
+                if ((GodotObject)((GCHandle)godotObjectGCHandle).Target is not { Disposed: false } godotObject
+                    && !InteropUtils.TryCreateManagedForScriptInstance(unmanaged, godotObjectGCHandle, out godotObject))
+                {
                     throw new InvalidOperationException("Godot Object instance is null.");
+                }
 
                 setterTrampoline(godotObject, *value);
                 return godot_bool.True;
@@ -194,14 +198,15 @@ namespace Godot.Bridge
         [UnmanagedCallersOnly]
         internal static unsafe godot_bool GetViaTrampoline(
             PropertyGetterTrampolineDelegate getterTrampoline,
-            IntPtr godotObjectGCHandle, godot_variant* outRet)
+            IntPtr unmanaged, IntPtr godotObjectGCHandle, godot_variant* outRet)
         {
             try
             {
-                object godotObject = GCHandle.FromIntPtr(godotObjectGCHandle).Target;
-
-                if (godotObject == null)
+                if ((GodotObject)((GCHandle)godotObjectGCHandle).Target is not { Disposed: false } godotObject
+                    && !InteropUtils.TryCreateManagedForScriptInstance(unmanaged, godotObjectGCHandle, out godotObject))
+                {
                     throw new InvalidOperationException("Godot Object instance is null.");
+                }
 
                 *outRet = getterTrampoline(godotObject);
                 return godot_bool.True;
@@ -219,7 +224,9 @@ namespace Godot.Bridge
         {
             try
             {
-                var godotObject = (GodotObject)GCHandle.FromIntPtr(godotObjectGCHandle).Target;
+                var godotObject = (GodotObject)((GCHandle)godotObjectGCHandle).Target;
+
+                // No re-creation necessary here. If it's not alive, then there's nothing to dispose.
 
                 if (okIfNull.ToBool())
                     godotObject?.Dispose();
@@ -233,20 +240,20 @@ namespace Godot.Bridge
         }
 
         [UnmanagedCallersOnly]
-        internal static unsafe void CallToString(IntPtr godotObjectGCHandle, godot_string* outRes, godot_bool* outValid)
+        internal static unsafe void CallToString(IntPtr unmanaged, IntPtr godotObjectGCHandle,
+            godot_string* outRes, godot_bool* outValid)
         {
             try
             {
-                var self = (GodotObject)GCHandle.FromIntPtr(godotObjectGCHandle).Target;
-
-                if (self == null)
+                if ((GodotObject)((GCHandle)godotObjectGCHandle).Target is not { Disposed: false } godotObject
+                    && !InteropUtils.TryCreateManagedForScriptInstance(unmanaged, godotObjectGCHandle, out godotObject))
                 {
                     *outRes = default;
                     *outValid = godot_bool.False;
                     return;
                 }
 
-                var resultStr = self.ToString();
+                var resultStr = godotObject.ToString();
 
                 if (resultStr == null)
                 {
@@ -267,14 +274,16 @@ namespace Godot.Bridge
         }
 
         [UnmanagedCallersOnly]
-        internal static unsafe godot_bool HasMethodUnknownParams(IntPtr godotObjectGCHandle, godot_string_name* method)
+        internal static unsafe godot_bool HasMethodUnknownParams(
+            IntPtr unmanaged, IntPtr godotObjectGCHandle, godot_string_name* method)
         {
             try
             {
-                var godotObject = (GodotObject)GCHandle.FromIntPtr(godotObjectGCHandle).Target;
-
-                if (godotObject == null)
+                if ((GodotObject)((GCHandle)godotObjectGCHandle).Target is not { Disposed: false } godotObject
+                    && !InteropUtils.TryCreateManagedForScriptInstance(unmanaged, godotObjectGCHandle, out godotObject))
+                {
                     return godot_bool.False;
+                }
 
                 return godotObject.HasGodotClassMethod(CustomUnsafe.AsRef(method)).ToGodotBool();
             }
@@ -294,8 +303,9 @@ namespace Godot.Bridge
         {
             try
             {
-                var godotObject = (GodotObject)GCHandle.FromIntPtr(godotObjectGCHandle).Target;
+                var godotObject = (GodotObject)((GCHandle)godotObjectGCHandle).Target;
 
+                // No re-creation necessary here. If it's not alive, then there's nothing to serialize.
                 if (godotObject == null)
                     return;
 
@@ -327,9 +337,10 @@ namespace Godot.Bridge
         {
             try
             {
-                var godotObject = (GodotObject)GCHandle.FromIntPtr(godotObjectGCHandle).Target;
+                var godotObject = (GodotObject)((GCHandle)godotObjectGCHandle).Target;
 
-                if (godotObject == null)
+                // No re-creation necessary here. It should be alive when deserialized.
+                if (godotObject == null || godotObject.Disposed)
                     return;
 
                 // Restore instance state

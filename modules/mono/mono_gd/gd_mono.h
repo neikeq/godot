@@ -122,9 +122,6 @@ public:
 	_FORCE_INLINE_ bool is_runtime_initialized() const {
 		return runtime_initialized;
 	}
-	_FORCE_INLINE_ bool is_finalizing_scripts_domain() {
-		return finalizing_scripts_domain;
-	}
 
 	_FORCE_INLINE_ const String &get_project_assembly_path() const {
 		return project_assembly_path;

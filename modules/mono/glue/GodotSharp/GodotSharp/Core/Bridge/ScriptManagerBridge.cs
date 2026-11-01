@@ -88,9 +88,12 @@ namespace Godot.Bridge
         }
 
         [UnmanagedCallersOnly]
-        internal static unsafe IntPtr CreateManagedForGodotObjectBinding(godot_string_name* nativeTypeName,
-            IntPtr godotObject)
+        internal static unsafe godot_bool CreateManagedForGodotObjectBinding(godot_string_name* nativeTypeName,
+            IntPtr godotObject, godot_bool refCounted, IntPtr* outStrongGCHandleRaw, IntPtr* outWeakGCHandleRaw)
         {
+            GCHandle strongGCHandle = default;
+            GCHandle weakGCHandle = default;
+
             try
             {
                 using var stringName = StringName.CreateTakingOwnershipOfDisposableValue(
@@ -99,12 +102,45 @@ namespace Godot.Bridge
 
                 var instance = Constructors.Invoke(nativeTypeNameStr, godotObject);
 
-                return GCHandle.ToIntPtr(CustomGCHandle.AllocStrong(instance));
+                strongGCHandle = CustomGCHandle.FromNullableIntPtr(*outStrongGCHandleRaw);
+                weakGCHandle = CustomGCHandle.FromNullableIntPtr(*outWeakGCHandleRaw);
+
+                if (strongGCHandle.IsAllocated)
+                    strongGCHandle.Target = instance;
+                else
+                    strongGCHandle = CustomGCHandle.AllocStrong(instance);
+
+                // The weak GC handle is unused for non-RefCounted objects, and thus it's not allocated.
+                if (refCounted.ToBool())
+                {
+                    if (weakGCHandle.IsAllocated)
+                        weakGCHandle.Target = instance;
+                    else
+                        weakGCHandle = CustomGCHandle.AllocWeak(instance);
+                }
+
+                *outStrongGCHandleRaw = (IntPtr)strongGCHandle;
+                *outWeakGCHandleRaw = (IntPtr)weakGCHandle;
+
+                return godot_bool.True;
             }
             catch (Exception e)
             {
                 ExceptionUtils.LogException(e);
-                return IntPtr.Zero;
+                try
+                {
+                    // In case of an exception, we free the GC handles if instead of re-using them we created new ones.
+                    if (strongGCHandle.IsAllocated && (IntPtr)strongGCHandle != *outStrongGCHandleRaw)
+                        strongGCHandle.Free();
+                    if (weakGCHandle.IsAllocated && (IntPtr)weakGCHandle != *outWeakGCHandleRaw)
+                        weakGCHandle.Free();
+                }
+                catch (Exception)
+                {
+                    // Ignored.
+                }
+
+                return godot_bool.False;
             }
         }
 
@@ -495,18 +531,25 @@ namespace Godot.Bridge
         [UnmanagedCallersOnly]
         internal static unsafe void GetOrCreateScriptBridgeForPath(godot_string* scriptPath, godot_ref* outScript)
         {
-            string scriptPathStr = Marshaling.ConvertStringToManaged(*scriptPath);
-
-            if (!_pathTypeBiMap.TryGetScriptType(scriptPathStr, out Type? scriptType))
+            try
             {
-                NativeFuncs.godotsharp_internal_new_csharp_script(outScript);
-                return;
+                string scriptPathStr = Marshaling.ConvertStringToManaged(*scriptPath);
+
+                if (!_pathTypeBiMap.TryGetScriptType(scriptPathStr, out Type? scriptType))
+                {
+                    NativeFuncs.godotsharp_internal_new_csharp_script(outScript);
+                    return;
+                }
+
+                Debug.Assert(!scriptType.IsGenericTypeDefinition,
+                    $"Cannot get or create script for a generic type definition '{scriptType.FullName}'. Path: '{scriptPathStr}'.");
+
+                GetOrCreateScriptBridgeForType(scriptType, outScript);
             }
-
-            Debug.Assert(!scriptType.IsGenericTypeDefinition,
-                $"Cannot get or create script for a generic type definition '{scriptType.FullName}'. Path: '{scriptPathStr}'.");
-
-            GetOrCreateScriptBridgeForType(scriptType, outScript);
+            catch (Exception e)
+            {
+                Console.Error.WriteLine(e);
+            }
         }
 
         private static unsafe void GetOrCreateScriptBridgeForType(Type scriptType, godot_ref* outScript)
@@ -517,12 +560,14 @@ namespace Godot.Bridge
                 if (_scriptTypeBiMap.TryGetScriptPtr(scriptType, out IntPtr scriptPtr))
                 {
                     // Use existing
-                    NativeFuncs.godotsharp_ref_new_from_ref_counted_ptr(out *outScript, scriptPtr);
-                    return;
+                    // The script might be in the process of being destroyed but yet to remove its bridge.
+                    if (NativeFuncs.godotsharp_ref_new_from_ref_counted_ptr(out *outScript, scriptPtr).ToBool())
+                        return;
                 }
 
                 // This path is slower, but it's only executed for the first instantiation of the type
-                CreateScriptBridgeForType(scriptType, outScript);
+                CreateScriptBridgeForTypeUpgradableReadLocked(scriptType, outScript,
+                    pendingRemovalScriptPtr: scriptPtr);
             }
             finally
             {
@@ -543,9 +588,12 @@ namespace Godot.Bridge
                     if (_scriptTypeBiMap.TryGetScriptPtr(scriptType, out IntPtr scriptPtr))
                     {
                         // Use existing
-                        NativeFuncs.godotsharp_ref_new_from_ref_counted_ptr(out *outScript, scriptPtr);
-                        scriptPath = null;
-                        return false;
+                        // The script might be in the process of being destroyed but yet to remove its bridge.
+                        if (NativeFuncs.godotsharp_ref_new_from_ref_counted_ptr(out *outScript, scriptPtr).ToBool())
+                        {
+                            scriptPath = null;
+                            return false;
+                        }
                     }
 
                     // This path is slower, but it's only executed for the first instantiation of the type
@@ -562,7 +610,8 @@ namespace Godot.Bridge
                             return true;
                     }
 
-                    CreateScriptBridgeForType(scriptType, outScript);
+                    CreateScriptBridgeForTypeUpgradableReadLocked(scriptType, outScript,
+                        pendingRemovalScriptPtr: scriptPtr);
                     scriptPath = null;
                 }
                 finally
@@ -638,9 +687,12 @@ namespace Godot.Bridge
         }
 
         /// <summary>
+        /// Must be invoked within a _scriptTypeBiMap.ReadWriteLock upgradable read lock.
+        ///
         /// WARNING: We need to make sure that after unlocking the bimap, we call godotsharp_internal_reload_registered_script
         /// </summary>
-        private static unsafe void CreateScriptBridgeForType(Type scriptType, godot_ref* outScript)
+        private static unsafe void CreateScriptBridgeForTypeUpgradableReadLocked(
+            Type scriptType, godot_ref* outScript, IntPtr pendingRemovalScriptPtr)
         {
             Debug.Assert(!scriptType.IsGenericTypeDefinition,
                 $"Script type must be a constructed generic type or not generic at all. Type: {scriptType}.");
@@ -648,8 +700,22 @@ namespace Godot.Bridge
             _scriptTypeBiMap.ReadWriteLock.EnterWriteLock();
             try
             {
+                // Try again after write-locking in case another thread got ahead of us.
+                if (_scriptTypeBiMap.TryGetScriptPtr(scriptType, out IntPtr scriptPtr)
+                    && scriptPtr != pendingRemovalScriptPtr)
+                {
+                    // Use existing
+                    // The script might be in the process of being destroyed but yet to remove its bridge.
+                    if (NativeFuncs.godotsharp_ref_new_from_ref_counted_ptr(out *outScript, scriptPtr).ToBool())
+                        return;
+                }
+
+                // Remove the previous one.
+                if (pendingRemovalScriptPtr != IntPtr.Zero)
+                    _scriptTypeBiMap.Remove(pendingRemovalScriptPtr);
+
                 NativeFuncs.godotsharp_internal_new_csharp_script(outScript);
-                IntPtr scriptPtr = outScript->Reference;
+                scriptPtr = outScript->Reference;
 
                 _scriptTypeBiMap.Add(scriptPtr, scriptType);
             }
@@ -1457,35 +1523,47 @@ namespace Godot.Bridge
         }
 
         [UnmanagedCallersOnly]
-        internal static unsafe godot_bool SwapGCHandleForType(IntPtr oldGCHandlePtr, IntPtr* outNewGCHandlePtr,
-            godot_bool createWeak)
+        internal static void ToggleOffStrongGCHandleForType(IntPtr strongGCHandleRaw)
         {
             try
             {
-                var oldGCHandle = GCHandle.FromIntPtr(oldGCHandlePtr);
+                GCHandle strongGCHandle = (GCHandle)strongGCHandleRaw;
+                strongGCHandle.Target = null;
+            }
+            catch (Exception e)
+            {
+                ExceptionUtils.LogException(e);
+            }
+        }
 
-                object? target = oldGCHandle.Target;
+        [UnmanagedCallersOnly]
+        internal static unsafe godot_bool TryToggleOnStrongGCHandleForType(
+            IntPtr* strongGCHandleRawAddr, IntPtr weakGCHandleRaw)
+        {
+            try
+            {
+                object? target = ((GCHandle)weakGCHandleRaw).Target;
 
                 if (target == null)
+                    return godot_bool.False;
+
+                IntPtr strongGCHandleRaw = *strongGCHandleRawAddr;
+
+                if (strongGCHandleRaw != IntPtr.Zero)
                 {
-                    CustomGCHandle.Free(oldGCHandle);
-                    *outNewGCHandlePtr = IntPtr.Zero;
-                    return godot_bool.False; // Called after the managed side was collected, so nothing to do here
+                    GCHandle strongGCHandle = (GCHandle)strongGCHandleRaw;
+                    strongGCHandle.Target = target;
+                }
+                else
+                {
+                    *strongGCHandleRawAddr = GCHandle.ToIntPtr(CustomGCHandle.AllocStrong(target));
                 }
 
-                // Release the current weak handle and replace it with a strong handle.
-                var newGCHandle = createWeak.ToBool()
-                    ? CustomGCHandle.AllocWeak(target)
-                    : CustomGCHandle.AllocStrong(target);
-
-                CustomGCHandle.Free(oldGCHandle);
-                *outNewGCHandlePtr = GCHandle.ToIntPtr(newGCHandle);
                 return godot_bool.True;
             }
             catch (Exception e)
             {
                 ExceptionUtils.LogException(e);
-                *outNewGCHandlePtr = IntPtr.Zero;
                 return godot_bool.False;
             }
         }

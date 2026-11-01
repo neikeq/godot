@@ -69,33 +69,64 @@ namespace Godot.NativeInterop
 
         internal static partial godot_bool godotsharp_internal_script_debugger_is_active();
 
-        internal static partial IntPtr godotsharp_internal_object_get_associated_gchandle(IntPtr ptr);
+        internal static partial IntPtr godotsharp_internal_object_get_associated_gchandle(IntPtr ptr, out godot_bool isDestructingScriptInstance);
 
-        internal static partial void godotsharp_internal_object_disposed(IntPtr ptr, IntPtr gcHandleToFree);
+        /// <summary>
+        /// Must be invoked between calls to <see cref="godotsharp_internal_lock_managed_lifetime_mutex"/>
+        /// and <see cref="godotsharp_internal_unlock_managed_lifetime_mutex"/>.
+        /// </summary>
+        internal static partial void godotsharp_internal_object_disposed_locked(IntPtr ptr);
 
-        internal static partial void godotsharp_internal_refcounted_disposed(IntPtr ptr, IntPtr gcHandleToFree,
-            godot_bool isFinalizer);
+        /// <summary>
+        /// Must be invoked between calls to <see cref="godotsharp_internal_lock_managed_lifetime_mutex"/>
+        /// and <see cref="godotsharp_internal_unlock_managed_lifetime_mutex"/>.
+        /// </summary>
+        internal static partial void godotsharp_internal_refcounted_disposed_locked(IntPtr ptr, godot_bool isFinalizer);
+
+        internal static partial void godotsharp_internal_lock_managed_lifetime_mutex();
+
+        internal static partial void godotsharp_internal_unlock_managed_lifetime_mutex();
 
         internal static partial Error godotsharp_internal_signal_awaiter_connect(IntPtr source,
             in godot_string_name signal,
             IntPtr target, IntPtr awaiterHandlePtr);
 
-        internal static partial void godotsharp_internal_tie_native_managed_to_unmanaged(IntPtr gcHandleIntPtr,
+        internal static partial void godotsharp_internal_object_get_existing_associated_gchandles(
+            IntPtr unmanaged, out IntPtr rawStrongGCHandle, out IntPtr rawWeakGCHandle);
+
+        internal static partial void godotsharp_internal_tie_native_managed_to_unmanaged(
+            IntPtr strongGCHandleIntPtr, IntPtr weakGCHandleIntPtr,
             IntPtr unmanaged, in godot_string_name nativeName, godot_bool refCounted);
 
-        internal static partial void godotsharp_internal_tie_user_managed_to_unmanaged(IntPtr gcHandleIntPtr,
+        internal static partial void godotsharp_internal_tie_user_managed_to_unmanaged(
+            IntPtr strongGCHandleIntPtr, IntPtr weakGCHandleIntPtr,
             IntPtr unmanaged, godot_ref* scriptPtr, godot_bool refCounted);
 
         internal static partial void godotsharp_internal_tie_managed_to_unmanaged_with_pre_setup(
-            IntPtr gcHandleIntPtr, IntPtr unmanaged);
+            IntPtr strongGCHandleIntPtr, IntPtr weakGCHandleIntPtr, IntPtr unmanaged);
 
         internal static partial IntPtr godotsharp_internal_unmanaged_get_script_instance_managed(IntPtr p_unmanaged,
             out godot_bool r_has_cs_script_instance);
 
+        /// <summary>
+        /// Must be invoked between calls to <see cref="godotsharp_internal_lock_managed_lifetime_mutex"/>
+        /// and <see cref="godotsharp_internal_unlock_managed_lifetime_mutex"/>.
+        /// </summary>
+        internal static partial IntPtr godotsharp_internal_unmanaged_script_instance_create_managed_locked(IntPtr p_unmanaged);
+
+        /// <summary>
+        /// Must be invoked between calls to <see cref="godotsharp_internal_lock_managed_lifetime_mutex"/>
+        /// and <see cref="godotsharp_internal_unlock_managed_lifetime_mutex"/>.
+        /// </summary>
+        internal static partial IntPtr godotsharp_internal_unmanaged_get_instance_binding_managed_locked(IntPtr p_unmanaged);
+
         internal static partial IntPtr godotsharp_internal_unmanaged_get_instance_binding_managed(IntPtr p_unmanaged);
 
-        internal static partial IntPtr godotsharp_internal_unmanaged_instance_binding_create_managed(IntPtr p_unmanaged,
-            IntPtr oldGCHandlePtr);
+        /// <summary>
+        /// Must be invoked between calls to <see cref="godotsharp_internal_lock_managed_lifetime_mutex"/>
+        /// and <see cref="godotsharp_internal_unlock_managed_lifetime_mutex"/>.
+        /// </summary>
+        internal static partial IntPtr godotsharp_internal_unmanaged_instance_binding_create_managed_locked(IntPtr p_unmanaged);
 
         internal static partial void godotsharp_internal_new_csharp_script(godot_ref* r_dest);
 
@@ -109,7 +140,7 @@ namespace Godot.NativeInterop
         internal static partial void godotsharp_array_filter_godot_objects_by_non_native(scoped in godot_array p_input,
             out godot_array r_output);
 
-        public static partial void godotsharp_ref_new_from_ref_counted_ptr(out godot_ref r_dest,
+        public static partial godot_bool godotsharp_ref_new_from_ref_counted_ptr(out godot_ref r_dest,
             IntPtr p_ref_counted_ptr);
 
         public static partial void godotsharp_ref_destroy(ref godot_ref p_instance);

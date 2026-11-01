@@ -109,7 +109,7 @@ bool godotsharp_internal_script_debugger_is_active() {
 	return EngineDebugger::is_active();
 }
 
-GCHandleIntPtr godotsharp_internal_object_get_associated_gchandle(Object *p_ptr) {
+GCHandleIntPtr godotsharp_internal_object_get_associated_gchandle(Object *p_ptr, bool *r_is_destructing_script_instance) {
 #ifdef DEBUG_ENABLED
 	CRASH_COND(p_ptr == nullptr);
 #endif
@@ -118,8 +118,10 @@ GCHandleIntPtr godotsharp_internal_object_get_associated_gchandle(Object *p_ptr)
 		CSharpInstance *cs_instance = CAST_CSHARP_INSTANCE(p_ptr->get_script_instance());
 		if (cs_instance) {
 			if (!cs_instance->is_destructing_script_instance()) {
-				return cs_instance->get_gchandle_intptr();
+				*r_is_destructing_script_instance = false;
+				return cs_instance->get_final_gchandle_raw();
 			}
+			*r_is_destructing_script_instance = true;
 			return { nullptr };
 		}
 	}
@@ -129,15 +131,18 @@ GCHandleIntPtr godotsharp_internal_object_get_associated_gchandle(Object *p_ptr)
 	if (data) {
 		CSharpScriptBinding &script_binding = ((RBMap<Object *, CSharpScriptBinding>::Element *)data)->get();
 		if (script_binding.inited) {
-			MonoGCHandleData &gchandle = script_binding.gchandle;
+			MonoGCHandleData &gchandle = script_binding.final_gchandle;
+			*r_is_destructing_script_instance = false;
 			return !gchandle.is_released() ? gchandle.get_intptr() : GCHandleIntPtr{ nullptr };
 		}
 	}
 
+	*r_is_destructing_script_instance = false;
 	return { nullptr };
 }
 
-void godotsharp_internal_object_disposed(Object *p_ptr, GCHandleIntPtr p_gchandle_to_free) {
+/// Called with a lock to \ref CSharpLanguage::get_singleton()->get_managed_lifetime_mutex() held.
+void godotsharp_internal_object_disposed_locked(Object *p_ptr) {
 #ifdef DEBUG_ENABLED
 	CRASH_COND(p_ptr == nullptr);
 #endif
@@ -146,32 +151,38 @@ void godotsharp_internal_object_disposed(Object *p_ptr, GCHandleIntPtr p_gchandl
 		CSharpInstance *cs_instance = CAST_CSHARP_INSTANCE(p_ptr->get_script_instance());
 		if (cs_instance) {
 			if (!cs_instance->is_destructing_script_instance()) {
-				cs_instance->mono_object_disposed(p_gchandle_to_free);
-				p_ptr->set_script_instance(nullptr);
+				cs_instance->mono_object_disposed_locked();
 			}
 			return;
 		}
 	}
+
+	// We need to toggle off the strong handle to allow the managed side to be collected now that it's no longer needed.
 
 	void *data = CSharpLanguage::get_existing_instance_binding(p_ptr);
 
 	if (data) {
 		CSharpScriptBinding &script_binding = ((RBMap<Object *, CSharpScriptBinding>::Element *)data)->get();
 		if (script_binding.inited) {
-			if (!script_binding.gchandle.is_released()) {
-				CSharpLanguage::release_binding_gchandle_thread_safe(p_gchandle_to_free, script_binding);
+			if (!script_binding.strong_gchandle.is_released()) {
+				MutexLock lock(CSharpLanguage::get_singleton()->get_strong_gchandle_mutex());
+				if (script_binding.strong_gchandle_toggled) {
+					GDMonoCache::managed_callbacks.ScriptManagerBridge_ToggleOffStrongGCHandleForType(
+							script_binding.strong_gchandle.get_intptr());
+					script_binding.strong_gchandle_toggled = false;
+				}
 			}
 		}
 	}
 }
 
-void godotsharp_internal_refcounted_disposed(Object *p_ptr, GCHandleIntPtr p_gchandle_to_free, bool p_is_finalizer) {
+/// Called with a lock to \ref CSharpLanguage::get_singleton()->get_managed_lifetime_mutex() held.
+void godotsharp_internal_refcounted_disposed_locked(Object *p_ptr, bool p_is_finalizer) {
 #ifdef DEBUG_ENABLED
 	CRASH_COND(p_ptr == nullptr);
 	// This is only called with RefCounted derived classes
 	CRASH_COND(!Object::cast_to<RefCounted>(p_ptr));
 #endif
-
 	RefCounted *rc = static_cast<RefCounted *>(p_ptr);
 
 	if (rc->get_script_instance()) {
@@ -179,15 +190,9 @@ void godotsharp_internal_refcounted_disposed(Object *p_ptr, GCHandleIntPtr p_gch
 		if (cs_instance) {
 			if (!cs_instance->is_destructing_script_instance()) {
 				bool delete_owner;
-				bool remove_script_instance;
-
-				cs_instance->mono_object_disposed_baseref(p_gchandle_to_free, p_is_finalizer,
-						delete_owner, remove_script_instance);
-
+				cs_instance->mono_object_disposed_baseref_locked(p_is_finalizer, delete_owner);
 				if (delete_owner) {
 					memdelete(rc);
-				} else if (remove_script_instance) {
-					rc->set_script_instance(nullptr);
 				}
 			}
 			return;
@@ -199,23 +204,32 @@ void godotsharp_internal_refcounted_disposed(Object *p_ptr, GCHandleIntPtr p_gch
 	CSharpLanguage::get_singleton()->pre_unsafe_unreference(rc);
 	if (rc->unreference()) {
 		memdelete(rc);
-	} else {
+	} else if (!p_is_finalizer) {
+		// This is a manual Dispose call. We need to toggle off the strong handle
+		// to allow the managed side to be collected now that it's no longer needed.
+
 		void *data = CSharpLanguage::get_existing_instance_binding(rc);
 
 		if (data) {
 			CSharpScriptBinding &script_binding = ((RBMap<Object *, CSharpScriptBinding>::Element *)data)->get();
 			if (script_binding.inited) {
-				if (!script_binding.gchandle.is_released()) {
-					if (rc->get_reference_count() == 1 && script_binding.gchandle.is_weak()) {
-						// The GCHandle is just swapped, so get the swapped handle to release
-						// See: CSharpLanguage::_instance_binding_reference_callback(void *p_token, void *p_binding, GDExtensionBool p_reference)
-						p_gchandle_to_free = script_binding.gchandle.get_intptr();
-					}
-					CSharpLanguage::release_binding_gchandle_thread_safe(p_gchandle_to_free, script_binding);
+				MutexLock lock(CSharpLanguage::get_singleton()->get_strong_gchandle_mutex());
+				if (script_binding.strong_gchandle_toggled) {
+					GDMonoCache::managed_callbacks.ScriptManagerBridge_ToggleOffStrongGCHandleForType(
+							script_binding.strong_gchandle.get_intptr());
+					script_binding.strong_gchandle_toggled = false;
 				}
 			}
 		}
 	}
+}
+
+void godotsharp_internal_lock_managed_lifetime_mutex() {
+	CSharpLanguage::get_singleton()->get_managed_lifetime_mutex().lock();
+}
+
+void godotsharp_internal_unlock_managed_lifetime_mutex() {
+	CSharpLanguage::get_singleton()->get_managed_lifetime_mutex().unlock();
 }
 
 int64_t godotsharp_internal_signal_awaiter_connect(Object *p_source, StringName *p_signal, Object *p_target, GCHandleIntPtr p_awaiter_handle_ptr) {
@@ -234,7 +248,7 @@ GCHandleIntPtr godotsharp_internal_unmanaged_get_script_instance_managed(Object 
 
 		if (cs_instance) {
 			*r_has_cs_script_instance = true;
-			return cs_instance->get_gchandle_intptr();
+			return cs_instance->get_final_gchandle_raw();
 		}
 	}
 
@@ -242,35 +256,69 @@ GCHandleIntPtr godotsharp_internal_unmanaged_get_script_instance_managed(Object 
 	return { nullptr };
 }
 
+/// Must be invoked between calls to \ref godotsharp_internal_lock_managed_lifetime_mutex
+/// and \ref godotsharp_internal_unlock_managed_lifetime_mutex.
+GCHandleIntPtr godotsharp_internal_unmanaged_script_instance_create_managed_locked(Object *p_unmanaged) {
+#ifdef DEBUG_ENABLED
+	CRASH_COND(!p_unmanaged);
+#endif
+
+	if (!GDMono::get_singleton() || !GDMono::get_singleton()->is_runtime_initialized()) {
+		return { nullptr };
+	}
+
+	CSharpInstance *cs_instance = p_unmanaged->get_script_instance() != nullptr
+			? CAST_CSHARP_INSTANCE(p_unmanaged->get_script_instance())
+			: nullptr;
+
+	if (cs_instance == nullptr) {
+		// This can happen if the script or script instance were somehow removed before the lock could be acquire.
+		// That wouldn't really be a thread-safe operation, but that's none of our business.
+		return { nullptr };
+	}
+
+	if (!cs_instance->recreate_managed_object_locked()) {
+		return { nullptr };
+	}
+
+	return cs_instance->get_final_gchandle_raw();
+}
+
+GCHandleIntPtr godotsharp_internal_unmanaged_get_instance_binding_managed_locked(Object *p_unmanaged) {
+#ifdef DEBUG_ENABLED
+	CRASH_COND(!p_unmanaged);
+#endif
+
+	void *data = CSharpLanguage::get_instance_binding_with_setup_locked(p_unmanaged);
+	ERR_FAIL_NULL_V(data, { nullptr });
+	CSharpScriptBinding &script_binding = ((RBMap<Object *, CSharpScriptBinding>::Element *)data)->value();
+	ERR_FAIL_COND_V(!script_binding.inited, { nullptr });
+
+	return script_binding.final_gchandle.get_intptr();
+}
+
 GCHandleIntPtr godotsharp_internal_unmanaged_get_instance_binding_managed(Object *p_unmanaged) {
 #ifdef DEBUG_ENABLED
 	CRASH_COND(!p_unmanaged);
 #endif
 
-	void *data = CSharpLanguage::get_instance_binding_with_setup(p_unmanaged);
-	ERR_FAIL_NULL_V(data, { nullptr });
-	CSharpScriptBinding &script_binding = ((RBMap<Object *, CSharpScriptBinding>::Element *)data)->value();
-	ERR_FAIL_COND_V(!script_binding.inited, { nullptr });
+	MutexLock lock(CSharpLanguage::get_singleton()->get_managed_lifetime_mutex());
 
-	return script_binding.gchandle.get_intptr();
+	return godotsharp_internal_unmanaged_get_instance_binding_managed_locked(p_unmanaged);
 }
 
-GCHandleIntPtr godotsharp_internal_unmanaged_instance_binding_create_managed(Object *p_unmanaged, GCHandleIntPtr p_old_gchandle) {
+/// Must be invoked between calls to \ref godotsharp_internal_lock_managed_lifetime_mutex
+/// and \ref godotsharp_internal_unlock_managed_lifetime_mutex.
+GCHandleIntPtr godotsharp_internal_unmanaged_instance_binding_create_managed_locked(Object *p_unmanaged) {
 #ifdef DEBUG_ENABLED
 	CRASH_COND(!p_unmanaged);
 #endif
 
-	void *data = CSharpLanguage::get_instance_binding_with_setup(p_unmanaged);
+	void *data = CSharpLanguage::get_instance_binding_with_setup_locked(p_unmanaged);
 	ERR_FAIL_NULL_V(data, { nullptr });
 	CSharpScriptBinding &script_binding = ((RBMap<Object *, CSharpScriptBinding>::Element *)data)->value();
 	ERR_FAIL_COND_V(!script_binding.inited, { nullptr });
 
-	MonoGCHandleData &gchandle = script_binding.gchandle;
-
-	// TODO: Possible data race?
-	CRASH_COND(gchandle.get_intptr().value != p_old_gchandle.value);
-
-	CSharpLanguage::get_singleton()->release_script_gchandle(gchandle);
 	script_binding.inited = false;
 
 	// Create a new one
@@ -283,13 +331,21 @@ GCHandleIntPtr godotsharp_internal_unmanaged_instance_binding_create_managed(Obj
 	ERR_FAIL_COND_V_MSG(!parent_is_object_class, { nullptr },
 			"Type inherits from native type '" + script_binding.type_name + "', so it can't be instantiated in object of type: '" + p_unmanaged->get_class() + "'.");
 
-	GCHandleIntPtr strong_gchandle =
-			GDMonoCache::managed_callbacks.ScriptManagerBridge_CreateManagedForGodotObjectBinding(
-					&script_binding.type_name, p_unmanaged);
+	bool base_ref_counted = p_unmanaged->is_ref_counted();
 
-	ERR_FAIL_NULL_V(strong_gchandle.value, { nullptr });
+	GCHandleIntPtr new_strong_gchandle{ nullptr };
+	GCHandleIntPtr new_weak_gchandle{ nullptr };
+	bool managed_creation_ok = GDMonoCache::managed_callbacks.ScriptManagerBridge_CreateManagedForGodotObjectBinding(
+			&script_binding.type_name, p_unmanaged, base_ref_counted, &new_strong_gchandle, &new_weak_gchandle);
 
-	gchandle = MonoGCHandleData(strong_gchandle, gdmono::GCHandleType::STRONG_HANDLE);
+	ERR_FAIL_COND_V(!managed_creation_ok, { nullptr });
+
+	DEV_ASSERT(base_ref_counted ? new_weak_gchandle != nullptr : new_weak_gchandle == nullptr);
+
+	script_binding.strong_gchandle_toggled = true;
+	script_binding.strong_gchandle = MonoGCHandleData(new_strong_gchandle);
+	// For non-RefCounted objects, final_gchandle holds the same handle as strong_gchandle.
+	script_binding.final_gchandle = MonoGCHandleData(base_ref_counted ? new_weak_gchandle : new_strong_gchandle);
 	script_binding.inited = true;
 
 	// Tie managed to unmanaged
@@ -304,19 +360,35 @@ GCHandleIntPtr godotsharp_internal_unmanaged_instance_binding_create_managed(Obj
 		CSharpLanguage::get_singleton()->post_unsafe_reference(rc);
 	}
 
-	return gchandle.get_intptr();
+	return script_binding.final_gchandle.get_intptr();
 }
 
-void godotsharp_internal_tie_native_managed_to_unmanaged(GCHandleIntPtr p_gchandle_intptr, Object *p_unmanaged, const StringName *p_native_name, bool p_ref_counted) {
-	CSharpLanguage::tie_native_managed_to_unmanaged(p_gchandle_intptr, p_unmanaged, p_native_name, p_ref_counted);
+void godotsharp_internal_object_get_existing_associated_gchandles(const Object *p_unmanaged, GCHandleIntPtr *p_strong_gchandle_intptr, GCHandleIntPtr *p_weak_gchandle_intptr) {
+	DEV_ASSERT(p_unmanaged != nullptr);
+
+	const CSharpInstance *instance = CAST_CSHARP_INSTANCE(p_unmanaged->get_script_instance());
+
+	if (!instance) {
+		// Native bindings don't need post-setup
+		*p_strong_gchandle_intptr = { nullptr };
+		*p_weak_gchandle_intptr = { nullptr };
+		return;
+	}
+
+	*p_strong_gchandle_intptr = instance->get_strong_gchandle_raw();
+	*p_weak_gchandle_intptr = instance->get_final_gchandle_raw();
 }
 
-void godotsharp_internal_tie_user_managed_to_unmanaged(GCHandleIntPtr p_gchandle_intptr, Object *p_unmanaged, Ref<CSharpScript> *p_script, bool p_ref_counted) {
-	CSharpLanguage::tie_user_managed_to_unmanaged(p_gchandle_intptr, p_unmanaged, p_script, p_ref_counted);
+void godotsharp_internal_tie_native_managed_to_unmanaged(GCHandleIntPtr p_strong_gchandle_intptr, GCHandleIntPtr p_weak_gchandle_intptr, Object *p_unmanaged, const StringName *p_native_name, bool p_ref_counted) {
+	CSharpLanguage::tie_native_managed_to_unmanaged(p_strong_gchandle_intptr, p_weak_gchandle_intptr, p_unmanaged, p_native_name, p_ref_counted);
 }
 
-void godotsharp_internal_tie_managed_to_unmanaged_with_pre_setup(GCHandleIntPtr p_gchandle_intptr, Object *p_unmanaged) {
-	CSharpLanguage::tie_managed_to_unmanaged_with_pre_setup(p_gchandle_intptr, p_unmanaged);
+void godotsharp_internal_tie_user_managed_to_unmanaged(GCHandleIntPtr p_strong_gchandle_intptr, GCHandleIntPtr p_weak_gchandle_intptr, Object *p_unmanaged, Ref<CSharpScript> *p_script, bool p_ref_counted) {
+	CSharpLanguage::tie_user_managed_to_unmanaged(p_strong_gchandle_intptr, p_weak_gchandle_intptr, p_unmanaged, p_script, p_ref_counted);
+}
+
+void godotsharp_internal_tie_managed_to_unmanaged_with_pre_setup(GCHandleIntPtr p_strong_gchandle_intptr, GCHandleIntPtr p_weak_gchandle_intptr, Object *p_unmanaged) {
+	CSharpLanguage::tie_managed_to_unmanaged_with_pre_setup(p_strong_gchandle_intptr, p_weak_gchandle_intptr, p_unmanaged);
 }
 
 void godotsharp_internal_new_csharp_script(Ref<CSharpScript> *r_dest) {
@@ -375,8 +447,9 @@ void godotsharp_array_filter_godot_objects_by_non_native(const Array *p_input, A
 	}
 }
 
-void godotsharp_ref_new_from_ref_counted_ptr(Ref<RefCounted> *r_dest, RefCounted *p_ref_counted_ptr) {
-	memnew_placement(r_dest, Ref<RefCounted>(p_ref_counted_ptr));
+bool godotsharp_ref_new_from_ref_counted_ptr(Ref<RefCounted> *r_dest, RefCounted *p_ref_counted_ptr) {
+	memnew_placement(r_dest, Ref(p_ref_counted_ptr));
+	return r_dest->is_valid();
 }
 
 void godotsharp_ref_destroy(Ref<RefCounted> *p_instance) {
@@ -1119,8 +1192,10 @@ void godotsharp_array_make_read_only(Array *p_self) {
 }
 
 void godotsharp_array_set_typed(Array *p_self, uint32_t p_elem_type, const StringName *p_elem_class_name, const Ref<CSharpScript> *p_elem_script) {
+	DEV_ASSERT(p_elem_script != nullptr);
+
 	StringName elem_class_name = *p_elem_class_name;
-	if (p_elem_script && p_elem_script->is_valid()) {
+	if (p_elem_script->is_valid()) {
 		elem_class_name = p_elem_script->ptr()->get_instance_base_type();
 	}
 	p_self->set_typed(p_elem_type, elem_class_name, p_elem_script->ptr());
@@ -1281,12 +1356,15 @@ void godotsharp_dictionary_make_read_only(Dictionary *p_self) {
 }
 
 void godotsharp_dictionary_set_typed(Dictionary *p_self, uint32_t p_key_type, const StringName *p_key_class_name, const Ref<CSharpScript> *p_key_script, uint32_t p_value_type, const StringName *p_value_class_name, const Ref<CSharpScript> *p_value_script) {
+	DEV_ASSERT(p_key_script != nullptr);
+	DEV_ASSERT(p_value_script != nullptr);
+
 	StringName key_class_name = *p_key_class_name;
-	if (p_key_script && p_key_script->is_valid()) {
+	if (p_key_script->is_valid()) {
 		key_class_name = p_key_script->ptr()->get_instance_base_type();
 	}
 	StringName value_class_name = *p_value_class_name;
-	if (p_value_script && p_value_script->is_valid()) {
+	if (p_value_script->is_valid()) {
 		value_class_name = p_value_script->ptr()->get_instance_base_type();
 	}
 	p_self->set_typed(p_key_type, key_class_name, p_key_script->ptr(), p_value_type, value_class_name, p_value_script->ptr());
@@ -1596,15 +1674,20 @@ static const void *unmanaged_callbacks[]{
 	(void *)godotsharp_internal_script_debugger_send_error,
 	(void *)godotsharp_internal_script_debugger_is_active,
 	(void *)godotsharp_internal_object_get_associated_gchandle,
-	(void *)godotsharp_internal_object_disposed,
-	(void *)godotsharp_internal_refcounted_disposed,
+	(void *)godotsharp_internal_object_disposed_locked,
+	(void *)godotsharp_internal_refcounted_disposed_locked,
+	(void *)godotsharp_internal_lock_managed_lifetime_mutex,
+	(void *)godotsharp_internal_unlock_managed_lifetime_mutex,
 	(void *)godotsharp_internal_signal_awaiter_connect,
+	(void *)godotsharp_internal_object_get_existing_associated_gchandles,
 	(void *)godotsharp_internal_tie_native_managed_to_unmanaged,
 	(void *)godotsharp_internal_tie_user_managed_to_unmanaged,
 	(void *)godotsharp_internal_tie_managed_to_unmanaged_with_pre_setup,
 	(void *)godotsharp_internal_unmanaged_get_script_instance_managed,
+	(void *)godotsharp_internal_unmanaged_script_instance_create_managed_locked,
+	(void *)godotsharp_internal_unmanaged_get_instance_binding_managed_locked,
 	(void *)godotsharp_internal_unmanaged_get_instance_binding_managed,
-	(void *)godotsharp_internal_unmanaged_instance_binding_create_managed,
+	(void *)godotsharp_internal_unmanaged_instance_binding_create_managed_locked,
 	(void *)godotsharp_internal_new_csharp_script,
 	(void *)godotsharp_internal_script_load,
 	(void *)godotsharp_internal_reload_registered_script,

@@ -246,7 +246,7 @@ private:
 	bool source_changed_cache = false;
 	bool placeholder_fallback_enabled = false;
 	bool exports_invalidated = true;
-	void _update_exports_values(HashMap<StringName, Variant> &values, List<PropertyInfo> &propnames);
+	void _update_exports_values(HashMap<StringName, Variant> &r_values, List<PropertyInfo> &r_propnames);
 	void _placeholder_erased(PlaceHolderScriptInstance *p_placeholder) override;
 #endif
 
@@ -366,13 +366,35 @@ class CSharpInstance : public ScriptInstance {
 
 	Object *owner = nullptr;
 	bool base_ref_counted = false;
-	bool ref_dying = false;
+	/// This is for use within the ~CSharpInstance destructor ONLY! Usage elsewhere is not thread-safe.
+	bool ref_dying_READ_BEFORE_USING = false;
 	bool unsafe_referenced = false;
 	bool predelete_notified = false;
 	bool destructing_script_instance = false;
 
+	/// Must be read/written with \ref CSharpLanguage::get_singleton()->get_managed_lifetime_mutex() locked.
+	bool managed_object_disposed_locked = true;
+	/// Must be read/written with \ref CSharpLanguage::get_singleton()->get_managed_lifetime_mutex() locked.
+	bool last_recreation_attempt_failed_locked = false;
+
+	/// Must be invoked with \ref CSharpLanguage::get_singleton()->get_managed_lifetime_mutex() locked.
+	void _set_managed_object_disposed_locked(bool p_disposed) {
+		managed_object_disposed_locked = p_disposed;
+		// If a new instance as created, clear the re-creation failure flag.
+		if (!p_disposed) {
+			last_recreation_attempt_failed_locked = false;
+		}
+	}
+
+	bool strong_gchandle_toggled = false;
+	MonoGCHandleData strong_gchandle;
+	/// A GCHandle that whose target doesn't change as long for the entire lifetime of this script instance.
+	/// <br>Reading from it is considered thread-safe without the need for locks.
+	/// <br>For RefCounted objects, this is a weak GC handle, and must be freed when the script instance is destructed.
+	/// <br>For other object types, this is the same handle as \ref CSharpInstance::strong_gchandle, so only one of them must be freed.
+	MonoGCHandleData final_gchandle;
+
 	Ref<CSharpScript> script;
-	MonoGCHandleData gchandle;
 
 	List<Callable> connected_event_signals;
 
@@ -383,22 +405,21 @@ class CSharpInstance : public ScriptInstance {
 	 */
 	bool _unreference_owner_unsafe();
 
-	/*
-	 * If false is returned, the caller must destroy the script instance by removing it from its owner.
-	 */
-	bool _internal_new_managed();
-
 	// Do not use unless you know what you are doing
-	static CSharpInstance *create_for_managed_type(Object *p_owner, CSharpScript *p_script, const MonoGCHandleData &p_gchandle);
+	static CSharpInstance *create_for_managed_type(Object *p_owner, CSharpScript *p_script, const MonoGCHandleData &p_strong_gchandle, const MonoGCHandleData &p_weak_gchandle);
 
 	Variant _callp(const StringName &p_method, const Variant **p_args, int p_argcount, Callable::CallError &r_error) const;
 
 	void _call_notification(int p_notification, bool p_reversed = false) const;
 
-public:
-	_FORCE_INLINE_ bool is_destructing_script_instance() { return destructing_script_instance; }
+	/// Must be invoked with \ref CSharpLanguage::get_singleton()->get_strong_gchandle_mutex() locked.
+	int _refcount_reference_callback_impl_locked();
 
-	_FORCE_INLINE_ GCHandleIntPtr get_gchandle_intptr() { return gchandle.get_intptr(); }
+public:
+	_FORCE_INLINE_ bool is_destructing_script_instance() const { return destructing_script_instance; }
+
+	_FORCE_INLINE_ GCHandleIntPtr get_strong_gchandle_raw() const { return strong_gchandle.get_intptr(); }
+	_FORCE_INLINE_ GCHandleIntPtr get_final_gchandle_raw() const { return final_gchandle.get_intptr(); }
 
 	Object *get_owner() override;
 
@@ -418,13 +439,22 @@ public:
 
 	void raise_event_signal(const StringName &p_event_signal_name, const Variant **p_args, int p_argcount, Callable::CallError &r_error) const;
 
-	void mono_object_disposed(GCHandleIntPtr p_gchandle_to_free);
+	/// Must be invoked with \ref CSharpLanguage::get_singleton()->get_managed_lifetime_mutex() locked.
+	void mono_object_disposed_locked();
 
-	/*
-	 * If 'r_delete_owner' is set to true, the caller must memdelete the script instance's owner. Otherwise, if
-	 * 'r_remove_script_instance' is set to true, the caller must destroy the script instance by removing it from its owner.
-	 */
-	void mono_object_disposed_baseref(GCHandleIntPtr p_gchandle_to_free, bool p_is_finalizer, bool &r_delete_owner, bool &r_remove_script_instance);
+	/// Must be invoked with \ref CSharpLanguage::get_singleton()->get_managed_lifetime_mutex() locked.
+	///
+	/// @param p_is_finalizer Whether the object is being disposed from the finalizer, or from a manual call.
+	/// @param r_delete_owner If true, the caller must memdelete the script instance's owner.
+	void mono_object_disposed_baseref_locked(bool p_is_finalizer, bool &r_delete_owner);
+
+	/// Recreate the script instance's managed object.
+	/// Only invoke this if the previous managed object was disposed; the function fails otherwise.
+	///
+	/// Must be invoked with \ref CSharpLanguage::get_singleton()->get_managed_lifetime_mutex() locked.
+	///
+	/// @return true if the managed object was successfully created; otherwise false.
+	bool recreate_managed_object_locked();
 
 	void connect_event_signals();
 	void disconnect_event_signals();
@@ -447,10 +477,16 @@ public:
 };
 
 struct CSharpScriptBinding {
-	bool inited = false;
 	StringName type_name;
-	MonoGCHandleData gchandle;
 	Object *owner = nullptr;
+	/// A GCHandle that whose target doesn't change as long for the entire lifetime of this script instance.
+	/// <br>Reading from it is considered thread-safe without the need for locks.
+	/// <br>For RefCounted objects, this is a weak GC handle, and must be freed when the script instance is destructed.
+	/// <br>For other object types, this is the same handle as \ref CSharpScriptBinding::strong_gchandle, so only one of them must be freed.
+	MonoGCHandleData final_gchandle;
+	MonoGCHandleData strong_gchandle;
+	bool strong_gchandle_toggled = false;
+	bool inited = false;
 
 	CSharpScriptBinding() {}
 };
@@ -472,8 +508,13 @@ class CSharpLanguage : public ScriptLanguage {
 	SelfList<CSharpScript>::List script_list;
 
 	Mutex script_instances_mutex;
-	Mutex script_gchandle_release_mutex;
 	Mutex language_bind_mutex;
+
+	/// Used for synchronization of creation and disposal of the managed object.
+	Mutex managed_lifetime_mutex;
+	/// Used for synchronization of strong GC handles changes that can happen
+	/// when the refcount changes, or when the managed object is created or disposed.
+	BinaryMutex strong_gchandle_mutex;
 
 	RBMap<Object *, CSharpScriptBinding> script_bindings;
 
@@ -508,9 +549,16 @@ class CSharpLanguage : public ScriptLanguage {
 	static GDExtensionInstanceBindingCallbacks _instance_binding_callbacks;
 
 public:
+	/// Used for synchronization of creation and disposal of the managed object.
+	[[nodiscard]] const Mutex &get_managed_lifetime_mutex() const { return managed_lifetime_mutex; }
+	/// Used for synchronization of strong GC handles changes that can happen
+	/// when the refcount changes, or when the managed object is created or disposed.
+	[[nodiscard]] const BinaryMutex &get_strong_gchandle_mutex() const { return strong_gchandle_mutex; }
+
 	static void *get_instance_binding(Object *p_object);
 	static void *get_existing_instance_binding(Object *p_object);
-	static void *get_instance_binding_with_setup(Object *p_object);
+	/// Must be invoked with \ref CSharpLanguage::get_singleton()->get_managed_lifetime_mutex() locked.
+	static void *get_instance_binding_with_setup_locked(Object *p_object);
 	static bool has_instance_binding(Object *p_object);
 
 	const Mutex &get_language_bind_mutex() {
@@ -535,9 +583,7 @@ public:
 	}
 #endif
 
-	static void release_script_gchandle(MonoGCHandleData &p_gchandle);
-	static void release_script_gchandle_thread_safe(GCHandleIntPtr p_gchandle_to_free, MonoGCHandleData &r_gchandle);
-	static void release_binding_gchandle_thread_safe(GCHandleIntPtr p_gchandle_to_free, CSharpScriptBinding &r_script_binding);
+	static void clear_strong_gchandle(MonoGCHandleData &p_gchandle);
 
 	bool debug_break(const String &p_error, bool p_allow_continue = true);
 	bool debug_break_parse(const String &p_file, int p_line, const String &p_error);
@@ -627,11 +673,12 @@ public:
 #endif
 
 	RBMap<Object *, CSharpScriptBinding>::Element *insert_script_binding(Object *p_object, const CSharpScriptBinding &p_script_binding);
-	bool setup_csharp_script_binding(CSharpScriptBinding &r_script_binding, Object *p_object);
+	/// Must be invoked with \ref CSharpLanguage::get_singleton()->get_managed_lifetime_mutex() locked.
+	bool setup_csharp_script_binding_locked(CSharpScriptBinding &r_script_binding, Object *p_object);
 
-	static void tie_native_managed_to_unmanaged(GCHandleIntPtr p_gchandle_intptr, Object *p_unmanaged, const StringName *p_native_name, bool p_ref_counted);
-	static void tie_user_managed_to_unmanaged(GCHandleIntPtr p_gchandle_intptr, Object *p_unmanaged, Ref<CSharpScript> *p_script, bool p_ref_counted);
-	static void tie_managed_to_unmanaged_with_pre_setup(GCHandleIntPtr p_gchandle_intptr, Object *p_unmanaged);
+	static void tie_native_managed_to_unmanaged(GCHandleIntPtr p_strong_gchandle_intptr, GCHandleIntPtr p_weak_gchandle_intptr, Object *p_unmanaged, const StringName *p_native_name, bool p_ref_counted);
+	static void tie_user_managed_to_unmanaged(GCHandleIntPtr p_strong_gchandle_intptr, GCHandleIntPtr p_weak_gchandle_intptr, Object *p_unmanaged, Ref<CSharpScript> *p_script, bool p_ref_counted);
+	static void tie_managed_to_unmanaged_with_pre_setup(GCHandleIntPtr p_strong_gchandle_intptr, GCHandleIntPtr p_weak_gchandle_intptr, Object *p_unmanaged);
 
 	void post_unsafe_reference(Object *p_obj);
 	void pre_unsafe_unreference(Object *p_obj);

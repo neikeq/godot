@@ -38,7 +38,7 @@ Error gd_mono_connect_signal_awaiter(Object *p_source, const StringName &p_signa
 	ERR_FAIL_NULL_V(p_target, ERR_INVALID_DATA);
 
 	// TODO: Use pooling for ManagedCallable instances.
-	MonoGCHandleData awaiter_handle(p_awaiter_handle_ptr, gdmono::GCHandleType::STRONG_HANDLE);
+	MonoGCHandleData awaiter_handle(p_awaiter_handle_ptr);
 	SignalAwaiterCallable *awaiter_callable = memnew(SignalAwaiterCallable(p_target, awaiter_handle, p_signal));
 	Callable callable = Callable(awaiter_callable);
 

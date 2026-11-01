@@ -43,18 +43,23 @@ public static class CustomGCHandle
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static GCHandle AllocStrong(object value)
-        => AllocStrong(value, value.GetType());
+    public static GCHandle FromNullableIntPtr(IntPtr rawGCHandle)
+        => rawGCHandle != IntPtr.Zero ? (GCHandle)rawGCHandle : default;
 
-    public static GCHandle AllocStrong(object value, Type valueType)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static GCHandle AllocStrong(object target)
+        => AllocStrong(target, target.GetType());
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static GCHandle AllocStrong(object target, Type targetType)
     {
         if (AlcReloadCfg.IsAlcReloadingEnabled)
         {
-            var alc = AssemblyLoadContext.GetLoadContext(valueType.Assembly);
+            var alc = AssemblyLoadContext.GetLoadContext(targetType.Assembly);
 
             if (alc != null)
             {
-                var weakHandle = GCHandle.Alloc(value, GCHandleType.Weak);
+                var weakHandle = GCHandle.Alloc(target, GCHandleType.Weak);
 
                 if (!IsAlcBeingUnloaded(alc))
                 {
@@ -64,18 +69,18 @@ public static class CustomGCHandle
                             alc.Unloading += OnAlcUnloading;
                             return new();
                         });
-                    strongReferences.TryAdd(weakHandle, value);
+                    strongReferences.TryAdd(weakHandle, target);
                 }
 
                 return weakHandle;
             }
         }
 
-        return GCHandle.Alloc(value, GCHandleType.Normal);
+        return GCHandle.Alloc(target, GCHandleType.Normal);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static GCHandle AllocWeak(object value) => GCHandle.Alloc(value, GCHandleType.Weak);
+    public static GCHandle AllocWeak(object target) => GCHandle.Alloc(target, GCHandleType.Weak);
 
     public static void Free(GCHandle handle)
     {

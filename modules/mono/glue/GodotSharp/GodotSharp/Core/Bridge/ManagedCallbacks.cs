@@ -16,7 +16,7 @@ namespace Godot.Bridge
         public delegate* unmanaged<IntPtr, godot_array*, godot_bool> DelegateUtils_TrySerializeDelegateWithGCHandle;
         public delegate* unmanaged<godot_array*, IntPtr*, godot_bool> DelegateUtils_TryDeserializeDelegateWithGCHandle;
         public delegate* unmanaged<void> ScriptManagerBridge_FrameCallback;
-        public delegate* unmanaged<godot_string_name*, IntPtr, IntPtr> ScriptManagerBridge_CreateManagedForGodotObjectBinding;
+        public delegate* unmanaged<godot_string_name*, IntPtr, godot_bool, IntPtr*, IntPtr*, godot_bool> ScriptManagerBridge_CreateManagedForGodotObjectBinding;
         public delegate* unmanaged<IntPtr, IntPtr, godot_variant**, int, godot_bool> ScriptManagerBridge_CreateManagedForGodotObjectScriptInstance;
         public delegate* unmanaged<IntPtr, godot_string_name*, void> ScriptManagerBridge_GetScriptNativeName;
         public delegate* unmanaged<godot_string*, godot_string*, godot_string*, godot_bool*, godot_bool*, godot_string*, void> ScriptManagerBridge_GetGlobalClassName;
@@ -34,20 +34,21 @@ namespace Godot.Bridge
             delegate* unmanaged<IntPtr, godot_string_name*, int, void*, void>,
             void> ScriptManagerBridge_UpdateScriptTrampolines;
         public delegate* unmanaged<IntPtr, godot_csharp_type_info*, godot_array*, godot_dictionary*, godot_dictionary*, godot_ref*, void> ScriptManagerBridge_UpdateScriptClassInfo;
-        public delegate* unmanaged<IntPtr, IntPtr*, godot_bool, godot_bool> ScriptManagerBridge_SwapGCHandleForType;
+        public delegate* unmanaged<IntPtr, void> ScriptManagerBridge_ToggleOffStrongGCHandleForType;
+        public delegate* unmanaged<IntPtr*, IntPtr, godot_bool> ScriptManagerBridge_TryToggleOnStrongGCHandleForType;
         public delegate* unmanaged<IntPtr, delegate* unmanaged<IntPtr, godot_string*, void*, int, void>, void> ScriptManagerBridge_GetPropertyInfoList;
         public delegate* unmanaged<IntPtr, delegate* unmanaged<IntPtr, void*, int, void>, void> ScriptManagerBridge_GetPropertyDefaultValues;
         public delegate* unmanaged<IntPtr, godot_string_name*, godot_variant**, int, godot_variant_call_error*, godot_variant*, godot_bool> ScriptManagerBridge_CallStatic;
         public delegate* unmanaged<MethodTrampolineDelegate, godot_variant**, int, godot_variant_call_error*, godot_variant*, godot_bool> ScriptManagerBridge_CallStaticWithTrampoline;
-        public delegate* unmanaged<IntPtr, godot_string_name*, godot_variant**, int, godot_variant_call_error*, godot_variant*, godot_bool> CSharpInstanceBridge_Call;
-        public delegate* unmanaged<IntPtr, godot_string_name*, godot_variant*, godot_bool> CSharpInstanceBridge_Set;
-        public delegate* unmanaged<IntPtr, godot_string_name*, godot_variant*, godot_bool> CSharpInstanceBridge_Get;
-        public delegate* unmanaged<MethodTrampolineDelegate, IntPtr, godot_variant**, int, godot_variant_call_error*, godot_variant*, godot_bool> CSharpInstanceBridge_CallViaTrampoline;
-        public delegate* unmanaged<PropertySetterTrampolineDelegate, IntPtr, godot_variant*, godot_bool> CSharpInstanceBridge_SetViaTrampoline;
-        public delegate* unmanaged<PropertyGetterTrampolineDelegate, IntPtr, godot_variant*, godot_bool> CSharpInstanceBridge_GetViaTrampoline;
+        public delegate* unmanaged<IntPtr, IntPtr, godot_string_name*, godot_variant**, int, godot_variant_call_error*, godot_variant*, godot_bool> CSharpInstanceBridge_Call;
+        public delegate* unmanaged<IntPtr, IntPtr, godot_string_name*, godot_variant*, godot_bool> CSharpInstanceBridge_Set;
+        public delegate* unmanaged<IntPtr, IntPtr, godot_string_name*, godot_variant*, godot_bool> CSharpInstanceBridge_Get;
+        public delegate* unmanaged<MethodTrampolineDelegate, IntPtr, IntPtr, godot_variant**, int, godot_variant_call_error*, godot_variant*, godot_bool> CSharpInstanceBridge_CallViaTrampoline;
+        public delegate* unmanaged<PropertySetterTrampolineDelegate, IntPtr, IntPtr, godot_variant*, godot_bool> CSharpInstanceBridge_SetViaTrampoline;
+        public delegate* unmanaged<PropertyGetterTrampolineDelegate, IntPtr, IntPtr, godot_variant*, godot_bool> CSharpInstanceBridge_GetViaTrampoline;
         public delegate* unmanaged<IntPtr, godot_bool, void> CSharpInstanceBridge_CallDispose;
-        public delegate* unmanaged<IntPtr, godot_string*, godot_bool*, void> CSharpInstanceBridge_CallToString;
-        public delegate* unmanaged<IntPtr, godot_string_name*, godot_bool> CSharpInstanceBridge_HasMethodUnknownParams;
+        public delegate* unmanaged<IntPtr, IntPtr, godot_string*, godot_bool*, void> CSharpInstanceBridge_CallToString;
+        public delegate* unmanaged<IntPtr, IntPtr, godot_string_name*, godot_bool> CSharpInstanceBridge_HasMethodUnknownParams;
         public delegate* unmanaged<IntPtr, godot_dictionary*, godot_dictionary*, void> CSharpInstanceBridge_SerializeState;
         public delegate* unmanaged<IntPtr, godot_dictionary*, godot_dictionary*, void> CSharpInstanceBridge_DeserializeState;
         public delegate* unmanaged<IntPtr, void> GCHandleBridge_FreeGCHandle;
@@ -84,7 +85,8 @@ namespace Godot.Bridge
                 ScriptManagerBridge_TryReloadRegisteredScriptWithClass = &ScriptManagerBridge.TryReloadRegisteredScriptWithClass,
                 ScriptManagerBridge_UpdateScriptTrampolines = &ScriptManagerBridge.UpdateScriptTrampolines,
                 ScriptManagerBridge_UpdateScriptClassInfo = &ScriptManagerBridge.UpdateScriptClassInfo,
-                ScriptManagerBridge_SwapGCHandleForType = &ScriptManagerBridge.SwapGCHandleForType,
+                ScriptManagerBridge_ToggleOffStrongGCHandleForType = &ScriptManagerBridge.ToggleOffStrongGCHandleForType,
+                ScriptManagerBridge_TryToggleOnStrongGCHandleForType = &ScriptManagerBridge.TryToggleOnStrongGCHandleForType,
                 ScriptManagerBridge_GetPropertyInfoList = &ScriptManagerBridge.GetPropertyInfoList,
                 ScriptManagerBridge_GetPropertyDefaultValues = &ScriptManagerBridge.GetPropertyDefaultValues,
                 ScriptManagerBridge_CallStatic = &ScriptManagerBridge.CallStatic,
